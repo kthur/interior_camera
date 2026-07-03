@@ -3,6 +3,7 @@ package com.example.interiorcamera.ui.ar
 import android.Manifest
 import android.content.pm.PackageManager
 import android.view.MotionEvent
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -65,6 +66,14 @@ fun ArScreen(
         engine = engine,
         modelLoader = modelLoader,
         planeRenderer = true,
+        onSessionFailed = { exception ->
+          Toast.makeText(
+            context,
+            "AR 실행 실패: 이 기기가 ARCore를 지원하지 않거나 필수 서비스(Google Play Services for AR)가 설치되어 있지 않습니다.",
+            Toast.LENGTH_LONG
+          ).show()
+          onBack()
+        },
         onSessionUpdated = { _, updatedFrame ->
           frame = updatedFrame
         },
