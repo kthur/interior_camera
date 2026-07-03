@@ -4,8 +4,6 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.view.MotionEvent
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,23 +34,7 @@ fun ArScreen(
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
-  var hasCameraPermission by remember {
-    mutableStateOf(
-      ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-    )
-  }
-
-  val permissionLauncher = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.RequestPermission()
-  ) { isGranted ->
-    hasCameraPermission = isGranted
-  }
-
-  LaunchedEffect(Unit) {
-    if (!hasCameraPermission) {
-      permissionLauncher.launch(Manifest.permission.CAMERA)
-    }
-  }
+  val hasCameraPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
   val engine = rememberEngine()
   val modelLoader = rememberModelLoader(engine)
@@ -172,10 +154,10 @@ fun ArScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
       ) {
-        Text("카메라 권한이 필요합니다.")
+        Text("카메라 권한이 없습니다. 메인 화면으로 돌아가 권한을 수락해 주세요.")
         Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
-          Text("권한 요청")
+        Button(onClick = onBack) {
+          Text("돌아가기")
         }
       }
     }
