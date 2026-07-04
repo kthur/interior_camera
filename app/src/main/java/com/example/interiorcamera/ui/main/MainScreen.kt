@@ -18,18 +18,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
 import com.example.interiorcamera.ArView
+import com.example.interiorcamera.data.PresetItem
 import com.example.interiorcamera.theme.InteriorCameraTheme
 import com.google.ar.core.ArCoreApk
-
-data class PresetItem(
-  val name: String,
-  val width: Float,
-  val height: Float,
-  val depth: Float,
-  val modelName: String = "cube.glb"
-)
 
 val PRESETS = listOf(
   PresetItem("양문형 냉장고", 91.2f, 178.4f, 75.0f, "refrigerator.glb"),
@@ -42,14 +37,33 @@ val PRESETS = listOf(
 @Composable
 fun MainScreen(
   onItemClick: (NavKey) -> Unit,
+  modifier: Modifier = Modifier,
+  viewModel: MainScreenViewModel = viewModel(factory = MainScreenViewModel.Factory)
+) {
+  val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  MainScreenContent(
+    uiState = uiState,
+    onItemClick = onItemClick,
+    onSavePreset = { viewModel.savePreset(it) },
+    modifier = modifier
+  )
+}
+
+@Composable
+fun MainScreenContent(
+  uiState: MainScreenUiState,
+  onItemClick: (NavKey) -> Unit,
+  onSavePreset: (PresetItem) -> Unit,
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
+  var customName by remember { mutableStateOf("") }
   var widthStr by remember { mutableStateOf("91.2") }
   var heightStr by remember { mutableStateOf("178.4") }
   var depthStr by remember { mutableStateOf("75.0") }
-  
+
   var selectedPresetIndex by remember { mutableStateOf(-1) }
+  var modelName by remember { mutableStateOf("cube.glb") }
 
   val permissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestPermission()
@@ -58,11 +72,6 @@ fun MainScreen(
       val width = widthStr.toFloatOrNull() ?: 0f
       val height = heightStr.toFloatOrNull() ?: 0f
       val depth = depthStr.toFloatOrNull() ?: 0f
-      val modelName = if (selectedPresetIndex in PRESETS.indices) {
-        PRESETS[selectedPresetIndex].modelName
-      } else {
-        "cube.glb"
-      }
       onItemClick(ArView(width, height, depth, modelName))
     } else {
       Toast.makeText(context, "AR 기능을 실행하려면 카메라 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
@@ -83,7 +92,7 @@ fun MainScreen(
       color = MaterialTheme.colorScheme.primary,
       modifier = Modifier.padding(top = 16.dp)
     )
-    
+
     Text(
       text = "가구 및 가전제품의 크기를 입력하고 카메라 화면을 통해 실제 공간에 맞는지 확인해 보세요.",
       style = MaterialTheme.typography.bodyMedium,
@@ -114,9 +123,11 @@ fun MainScreen(
               selected = selectedPresetIndex == index,
               onClick = {
                 selectedPresetIndex = index
+                customName = preset.name
                 widthStr = preset.width.toString()
                 heightStr = preset.height.toString()
                 depthStr = preset.depth.toString()
+                modelName = preset.modelName
               },
               label = { Text(preset.name) },
               modifier = Modifier.weight(1f)
@@ -124,6 +135,55 @@ fun MainScreen(
           }
           if (rowPresets.size < 2) {
             Spacer(modifier = Modifier.weight(1f))
+          }
+        }
+      }
+    }
+
+    // New section: 나의 리스트
+    if (uiState is MainScreenUiState.Success) {
+      val customPresets = uiState.presets
+      if (customPresets.isNotEmpty()) {
+        HorizontalDivider()
+        Text(
+          text = "나의 리스트",
+          style = MaterialTheme.typography.titleMedium,
+          modifier = Modifier.align(Alignment.Start)
+        )
+
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          customPresets.chunked(2).forEach { rowPresets ->
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              rowPresets.forEach { preset ->
+                val isSelected = selectedPresetIndex == -1 &&
+                    customName == preset.name &&
+                    widthStr == preset.width.toString() &&
+                    heightStr == preset.height.toString() &&
+                    depthStr == preset.depth.toString()
+                FilterChip(
+                  selected = isSelected,
+                  onClick = {
+                    selectedPresetIndex = -1
+                    customName = preset.name
+                    widthStr = preset.width.toString()
+                    heightStr = preset.height.toString()
+                    depthStr = preset.depth.toString()
+                    modelName = preset.modelName
+                  },
+                  label = { Text(preset.name) },
+                  modifier = Modifier.weight(1f)
+                )
+              }
+              if (rowPresets.size < 2) {
+                Spacer(modifier = Modifier.weight(1f))
+              }
+            }
           }
         }
       }
@@ -138,10 +198,21 @@ fun MainScreen(
     )
 
     OutlinedTextField(
+      value = customName,
+      onValueChange = {
+        customName = it
+      },
+      label = { Text("제품명 (Product Name)") },
+      modifier = Modifier.fillMaxWidth(),
+      singleLine = true
+    )
+
+    OutlinedTextField(
       value = widthStr,
       onValueChange = {
         widthStr = it
         selectedPresetIndex = -1
+        modelName = "cube.glb"
       },
       label = { Text("가로 너비 (Width)") },
       suffix = { Text("cm") },
@@ -155,6 +226,7 @@ fun MainScreen(
       onValueChange = {
         heightStr = it
         selectedPresetIndex = -1
+        modelName = "cube.glb"
       },
       label = { Text("높이 (Height)") },
       suffix = { Text("cm") },
@@ -168,6 +240,7 @@ fun MainScreen(
       onValueChange = {
         depthStr = it
         selectedPresetIndex = -1
+        modelName = "cube.glb"
       },
       label = { Text("깊이 (Depth)") },
       suffix = { Text("cm") },
@@ -176,12 +249,36 @@ fun MainScreen(
       singleLine = true
     )
 
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(8.dp))
 
     val width = widthStr.toFloatOrNull() ?: 0f
     val height = heightStr.toFloatOrNull() ?: 0f
     val depth = depthStr.toFloatOrNull() ?: 0f
     val isValid = width > 0f && height > 0f && depth > 0f
+    val isSaveEnabled = customName.isNotBlank() && isValid
+
+    Button(
+      onClick = {
+        if (isSaveEnabled) {
+          onSavePreset(
+            PresetItem(
+              name = customName.trim(),
+              width = width,
+              height = height,
+              depth = depth,
+              modelName = modelName
+            )
+          )
+          customName = ""
+        }
+      },
+      enabled = isSaveEnabled,
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Text("Save to My List")
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
 
     Button(
       onClick = {
@@ -191,12 +288,6 @@ fun MainScreen(
           if (availability == ArCoreApk.Availability.UNSUPPORTED_DEVICE_NOT_CAPABLE) {
             Toast.makeText(context, "이 기기는 ARCore를 지원하지 않아 AR 기능을 실행할 수 없습니다.", Toast.LENGTH_LONG).show()
             return@Button
-          }
-
-          val modelName = if (selectedPresetIndex in PRESETS.indices) {
-            PRESETS[selectedPresetIndex].modelName
-          } else {
-            "cube.glb"
           }
 
           val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -224,6 +315,11 @@ fun MainScreen(
 @Composable
 fun MainScreenPreview() {
   InteriorCameraTheme {
-    MainScreen(onItemClick = {})
+    MainScreenContent(
+      uiState = MainScreenUiState.Success(emptyList()),
+      onItemClick = {},
+      onSavePreset = {}
+    )
   }
 }
+
