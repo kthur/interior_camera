@@ -9,6 +9,7 @@ import android.view.MotionEvent
 import android.widget.Toast
 import java.io.File
 import java.io.FileOutputStream
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -19,6 +20,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.core.content.ContextCompat
 import com.google.android.filament.Box
 import com.google.android.filament.RenderableManager
@@ -204,7 +209,14 @@ fun ArScreen(
           FileOutputStream(file).use { out ->
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
           }
-          Toast.makeText(context, "캡처 저장 완료: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+          val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+          val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+          }
+          context.startActivity(Intent.createChooser(shareIntent, "스크린샷 공유"))
+          Toast.makeText(context, "캡처 저장 완료", Toast.LENGTH_LONG).show()
         }
       } catch (e: Exception) {
         Toast.makeText(context, "캡처 실패: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -222,6 +234,7 @@ fun ArScreen(
     selectedItemId = selectedItemId,
     isPlaneDetected = isPlaneDetected,
     trackingState = trackingState,
+    frame = frame,
     showGhost = showGhost,
     canUndo = actionHistory.isNotEmpty(),
     canRedo = redoStack.isNotEmpty(),
@@ -511,6 +524,7 @@ fun ArScreenContent(
   selectedItemId: String?,
   isPlaneDetected: Boolean,
   trackingState: TrackingState = TrackingState.TRACKING,
+  frame: Frame? = null,
   showGhost: Boolean = false,
   canUndo: Boolean = false,
   canRedo: Boolean = false,
@@ -756,6 +770,37 @@ fun ArScreenContent(
                   colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                   modifier = Modifier.weight(1f)
                 ) { Text("삭제") }
+              }
+            }
+          }
+        }
+
+        if (placedItems.isNotEmpty() && selectedItemId == null) {
+          Card(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(bottom = 4.dp),
+            colors = CardDefaults.cardColors(
+              containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+            )
+          ) {
+            Row(
+              modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(8.dp),
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              placedItems.forEachIndexed { idx, item ->
+                Surface(
+                  color = MaterialTheme.colorScheme.primaryContainer,
+                  shape = RoundedCornerShape(8.dp)
+                ) {
+                  Text(
+                    text = "#${idx+1} ${item.widthCm.toInt()}×${item.heightCm.toInt()}×${item.depthCm.toInt()}cm",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                  )
+                }
               }
             }
           }
