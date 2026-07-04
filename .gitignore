@@ -13,3 +13,13 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Multi-agent teamwork scaffolding
+.agents/
+.kotlin/
+
+# Auto-generated project docs
+PROJECT.md
+TEST_INFRA.md
+TEST_READY.md
+briefing.md
