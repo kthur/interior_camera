@@ -29,6 +29,8 @@ fun MainNavigation() {
             heightCm = key.heightCm,
             depthCm = key.depthCm,
             modelName = key.modelName,
+            calibrationFactor = key.calibrationFactor,
+            availableModels = key.items,
             onBack = { backStack.removeLastOrNull() }
           )
         }

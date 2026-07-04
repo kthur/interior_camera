@@ -15,12 +15,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
+import com.example.interiorcamera.ArItem
 import com.example.interiorcamera.ArView
 import com.example.interiorcamera.data.PresetItem
 import com.example.interiorcamera.theme.InteriorCameraTheme
@@ -64,6 +66,8 @@ fun MainScreenContent(
 
   var selectedPresetIndex by remember { mutableStateOf(-1) }
   var modelName by remember { mutableStateOf("cube.glb") }
+  var calibrationFactor by remember { mutableStateOf(1.0f) }
+  var showCalibrationDialog by remember { mutableStateOf(false) }
 
   val permissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestPermission()
@@ -72,7 +76,8 @@ fun MainScreenContent(
       val width = widthStr.toFloatOrNull() ?: 0f
       val height = heightStr.toFloatOrNull() ?: 0f
       val depth = depthStr.toFloatOrNull() ?: 0f
-      onItemClick(ArView(width, height, depth, modelName))
+      val arItems = PRESETS.map { ArItem(it.name, it.width, it.height, it.depth, it.modelName) }
+      onItemClick(ArView(width, height, depth, modelName, calibrationFactor, arItems))
     } else {
       Toast.makeText(context, "AR 기능을 실행하려면 카메라 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
     }
@@ -278,12 +283,46 @@ fun MainScreenContent(
       Text("Save to My List")
     }
 
+    Spacer(modifier = Modifier.height(4.dp))
+
+    HorizontalDivider()
+    Text(
+      text = "크기 보정 (선택사항)",
+      style = MaterialTheme.typography.titleSmall,
+      modifier = Modifier.align(Alignment.Start)
+    )
+    Text(
+      text = "AR 크기가 실제와 다르다면 보정값을 조정하세요. (1.0 = 기본, 0.9 = 10% 작게, 1.1 = 10% 크게)",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      OutlinedButton(onClick = { calibrationFactor = (calibrationFactor - 0.05f).coerceAtLeast(0.5f) }) {
+        Text("-0.05")
+      }
+      Text(
+        text = "%.2f".format(calibrationFactor),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.width(64.dp),
+        textAlign = TextAlign.Center
+      )
+      OutlinedButton(onClick = { calibrationFactor = (calibrationFactor + 0.05f).coerceAtMost(2.0f) }) {
+        Text("+0.05")
+      }
+      OutlinedButton(onClick = { calibrationFactor = 1.0f }) {
+        Text("초기화")
+      }
+    }
+
     Spacer(modifier = Modifier.height(8.dp))
 
     Button(
       onClick = {
         if (isValid) {
-          // Check ARCore support before proceeding
           val availability = ArCoreApk.getInstance().checkAvailability(context)
           if (availability == ArCoreApk.Availability.UNSUPPORTED_DEVICE_NOT_CAPABLE) {
             Toast.makeText(context, "이 기기는 ARCore를 지원하지 않아 AR 기능을 실행할 수 없습니다.", Toast.LENGTH_LONG).show()
@@ -292,7 +331,8 @@ fun MainScreenContent(
 
           val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
           if (hasPermission) {
-            onItemClick(ArView(width, height, depth, modelName))
+            val arItems = PRESETS.map { ArItem(it.name, it.width, it.height, it.depth, it.modelName) }
+            onItemClick(ArView(width, height, depth, modelName, calibrationFactor, arItems))
           } else {
             permissionLauncher.launch(Manifest.permission.CAMERA)
           }
