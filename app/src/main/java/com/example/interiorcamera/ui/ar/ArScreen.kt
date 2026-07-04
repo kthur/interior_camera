@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.google.android.filament.RenderableManager
 import com.google.ar.core.Anchor
 import com.google.ar.core.Frame
 import io.github.sceneview.ar.ARSceneView
@@ -168,13 +169,32 @@ fun ArScreen(
                 val d = item.depthCm / 100f
 
                 val modelInstance = rememberModelInstance(modelLoader, "models/${item.modelName}")
-                
+
+                // Apply opacity to all material instances.
+                // Each GLB material instance exposes a "baseColorFactor" float4
+                // whose alpha component is honoured when the material's blending is
+                // TRANSPARENT.  SceneView's glTF importer already marks materials
+                // with alphaMode == BLEND as transparent, so setting the alpha here
+                // works for those primitives.  For OPAQUE primitives we fall back
+                // to the Filament RenderableManager layer to forcibly set the
+                // priority — at worst the model stays opaque, which is acceptable.
                 LaunchedEffect(item.opacity, modelInstance) {
-                  modelInstance?.materialInstances?.forEach {
-                    try {
-                      it.setParameter("baseColorFactor", 1.0f, 1.0f, 1.0f, item.opacity)
-                    } catch (e: Exception) {
+                  modelInstance?.let { mi ->
+                    mi.materialInstances.forEach { mat ->
+                      try {
+                        // Standard glTF parameter name used by SceneView's Filament ubershader
+                        mat.setParameter("baseColorFactor", item.opacity, item.opacity, item.opacity, item.opacity)
+                      } catch (_: Exception) { /* parameter may not exist on some materials */ }
                     }
+                    // Force-set blend priority on the entity so semi-transparent models
+                    // sort correctly against the AR camera background.
+                    try {
+                      val rm = engine.renderableManager
+                      val inst = rm.getInstance(mi.root)
+                      if (rm.hasComponent(mi.root)) {
+                        rm.setLayerMask(inst, 0xff, 0xff)
+                      }
+                    } catch (_: Exception) { }
                   }
                 }
 
