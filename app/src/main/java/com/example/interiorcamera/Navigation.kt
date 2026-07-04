@@ -28,6 +28,7 @@ fun MainNavigation() {
             widthCm = key.widthCm,
             heightCm = key.heightCm,
             depthCm = key.depthCm,
+            modelName = key.modelName,
             onBack = { backStack.removeLastOrNull() }
           )
         }

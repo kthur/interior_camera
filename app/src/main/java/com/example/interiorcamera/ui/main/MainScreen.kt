@@ -27,15 +27,16 @@ data class PresetItem(
   val name: String,
   val width: Float,
   val height: Float,
-  val depth: Float
+  val depth: Float,
+  val modelName: String = "cube.glb"
 )
 
 val PRESETS = listOf(
-  PresetItem("양문형 냉장고", 91.2f, 178.4f, 75.0f),
-  PresetItem("드럼 세탁기", 60.0f, 85.0f, 65.0f),
-  PresetItem("4도어 김치냉장고", 66.6f, 179.7f, 69.5f),
-  PresetItem("식기세척기 (빌트인)", 59.8f, 84.5f, 57.3f),
-  PresetItem("옷장 (자작)", 100.0f, 210.0f, 60.0f)
+  PresetItem("양문형 냉장고", 91.2f, 178.4f, 75.0f, "refrigerator.glb"),
+  PresetItem("드럼 세탁기", 60.0f, 85.0f, 65.0f, "cube.glb"),
+  PresetItem("4도어 김치냉장고", 66.6f, 179.7f, 69.5f, "refrigerator.glb"),
+  PresetItem("식기세척기 (빌트인)", 59.8f, 84.5f, 57.3f, "cube.glb"),
+  PresetItem("옷장 (자작)", 100.0f, 210.0f, 60.0f, "cube.glb")
 )
 
 @Composable
@@ -57,7 +58,12 @@ fun MainScreen(
       val width = widthStr.toFloatOrNull() ?: 0f
       val height = heightStr.toFloatOrNull() ?: 0f
       val depth = depthStr.toFloatOrNull() ?: 0f
-      onItemClick(ArView(width, height, depth))
+      val modelName = if (selectedPresetIndex in PRESETS.indices) {
+        PRESETS[selectedPresetIndex].modelName
+      } else {
+        "cube.glb"
+      }
+      onItemClick(ArView(width, height, depth, modelName))
     } else {
       Toast.makeText(context, "AR 기능을 실행하려면 카메라 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
     }
@@ -187,9 +193,15 @@ fun MainScreen(
             return@Button
           }
 
+          val modelName = if (selectedPresetIndex in PRESETS.indices) {
+            PRESETS[selectedPresetIndex].modelName
+          } else {
+            "cube.glb"
+          }
+
           val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
           if (hasPermission) {
-            onItemClick(ArView(width, height, depth))
+            onItemClick(ArView(width, height, depth, modelName))
           } else {
             permissionLauncher.launch(Manifest.permission.CAMERA)
           }

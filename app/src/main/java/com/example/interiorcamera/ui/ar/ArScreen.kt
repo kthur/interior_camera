@@ -30,6 +30,7 @@ fun ArScreen(
   widthCm: Float,
   heightCm: Float,
   depthCm: Float,
+  modelName: String,
   onBack: () -> Unit,
   modifier: Modifier = Modifier
 ) {
@@ -78,7 +79,7 @@ fun ArScreen(
             val h = heightCm / 100f
             val d = depthCm / 100f
 
-            val modelInstance = rememberModelInstance(modelLoader, "models/cube.glb")
+            val modelInstance = rememberModelInstance(modelLoader, "models/$modelName")
             if (modelInstance != null) {
               ModelNode(
                 modelInstance = modelInstance,
