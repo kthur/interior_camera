@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Test
 
 class MainScreenViewModelTest {
@@ -28,6 +29,7 @@ class MainScreenViewModelTest {
     // Save a custom preset
     val customItem = PresetItem("My custom desk", 120.0f, 75.0f, 60.0f)
     viewModel.savePreset(customItem)
+    runCurrent()
 
     // Wait until Success is received and verify it contains the custom item
     val successState = viewModel.uiState.first { it is MainScreenUiState.Success } as MainScreenUiState.Success
@@ -41,11 +43,8 @@ class MainScreenViewModelTest {
     val viewModel = MainScreenViewModel(repository)
 
     val invalidItem = PresetItem("", -5f, 0f, 10f)
-    try {
-      viewModel.savePreset(invalidItem)
-    } catch (e: Exception) {
-      // expected or ignored in viewModel launch
-    }
+    viewModel.savePreset(invalidItem)
+    runCurrent()
 
     val successState = viewModel.uiState.first { it is MainScreenUiState.Success } as MainScreenUiState.Success
     assertTrue(successState.presets.isEmpty())
@@ -80,6 +79,7 @@ class MainScreenViewModelTest {
     val item2 = PresetItem("Chair", 50f, 90f, 50f)
     viewModel.savePreset(item1)
     viewModel.savePreset(item2)
+    runCurrent()
     val successState = viewModel.uiState.first { it is MainScreenUiState.Success && it.presets.size == 2 } as MainScreenUiState.Success
     assertEquals(2, successState.presets.size)
     assertEquals(item1, successState.presets[0])
@@ -93,6 +93,7 @@ class MainScreenViewModelTest {
     val item = PresetItem("Desk", 120f, 75f, 60f)
     viewModel.savePreset(item)
     viewModel.savePreset(item)
+    runCurrent()
     val successState = viewModel.uiState.first { it is MainScreenUiState.Success && it.presets.size == 2 } as MainScreenUiState.Success
     assertEquals(2, successState.presets.size)
     assertEquals(item, successState.presets[0])
