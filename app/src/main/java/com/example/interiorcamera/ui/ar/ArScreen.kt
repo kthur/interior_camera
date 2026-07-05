@@ -10,7 +10,13 @@ import android.widget.Toast
 import java.io.File
 import java.io.FileOutputStream
 import androidx.core.content.FileProvider
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -937,94 +943,84 @@ fun ArScreenContent(
 
       val selectedItem = placedItems.find { it.id == selectedItemId }
 
-      Column(
+      // ──────────────────────────────────────────────────────────────
+      // 패널 표시 상태: null=닫힘, "ruler"/"calibration"/"recommend"=해당 패널 열림
+      // ──────────────────────────────────────────────────────────────
+      var activePanelKey by remember { mutableStateOf<String?>(null) }
+
+      // 선택된 아이템이 있으면 다른 패널 닫기
+      LaunchedEffect(selectedItemId) {
+        if (selectedItemId != null) activePanelKey = null
+      }
+
+      // ── 상단 미니멀 상태 바 ───────────────────────────────────────
+      Row(
         modifier = Modifier
-          .align(Alignment.TopCenter)
-          .padding(top = 48.dp, start = 16.dp, end = 16.dp)
+          .align(Alignment.TopStart)
+          .padding(top = 48.dp, start = 12.dp, end = 12.dp)
           .fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
       ) {
-        Card(
-          colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+        // 뒤로가기
+        FilledTonalIconButton(
+          onClick = onBack,
+          modifier = Modifier.size(40.dp),
+          colors = IconButtonDefaults.filledTonalIconButtonColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
           )
         ) {
-          Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-              text = "배치할 크기: 가로 ${widthCm}cm x 세로 ${heightCm}cm x 깊이 ${depthCm}cm",
-              style = MaterialTheme.typography.titleSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (placedItems.isEmpty()) {
-              Text(
-                text = "바닥을 터치하여 원하는 개수만큼 가구를 배치해 보세요.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
-            } else {
-              Text(
-                text = "배치된 아이템: ${placedItems.size}개",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary
-              )
-            }
-            if (hasVerticalPlane) {
-              Text(
-                text = "벽면 감지됨 ✓ (벽에 정렬 가능)",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.secondary
-              )
-            }
-          }
+          Text("←", style = MaterialTheme.typography.titleMedium)
         }
-        if (trackingState != TrackingState.TRACKING) {
-          Card(
-            colors = CardDefaults.cardColors(
-              containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.9f)
-            )
-          ) {
-            Text(
-              text = if (trackingState == TrackingState.PAUSED) "⚠ 카메라 추적이 일시 중지되었습니다. 천천히 움직여 주세요."
-                     else "⚠ AR 추적이 중단되었습니다. 카메라를 천천히 움직여 주세요.",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onErrorContainer,
-              modifier = Modifier.padding(8.dp)
-            )
-          }
+        // 상태 칩
+        val statusText = when {
+          isRulerModeActive && measuredDistanceCm > 0f -> "📏 ${"%.1f".format(measuredDistanceCm)}cm"
+          isRulerModeActive -> "📏 자 모드 — 바닥을 터치하세요"
+          trackingState != TrackingState.TRACKING -> "⚠ 추적 중단"
+          placedItems.isEmpty() -> "바닥을 터치해 배치"
+          else -> "${placedItems.size}개 배치됨${if (hasVerticalPlane) "  벽 감지" else ""}"
         }
-        if (availableModels.isNotEmpty()) {
+        Surface(
+          shape = RoundedCornerShape(20.dp),
+          color = if (trackingState != TrackingState.TRACKING)
+            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.9f)
+          else
+            MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+          modifier = Modifier.weight(1f, fill = false).padding(horizontal = 8.dp)
+        ) {
           Text(
-            text = "모델 선택",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = statusText,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            maxLines = 1
           )
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-          ) {
+        }
+        // 모델 선택 (availableModels 있을 때만)
+        if (availableModels.isNotEmpty() && availableModels.size <= 3) {
+          Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             availableModels.forEachIndexed { index, model ->
               FilterChip(
                 selected = selectedModelIndex == index,
                 onClick = { onSelectModel(index) },
                 label = {
                   Text(
-                    model.name.ifEmpty { "${model.widthCm.toInt()}×${model.heightCm.toInt()}cm" },
+                    model.name.ifEmpty { "${model.widthCm.toInt()}cm" },
                     maxLines = 1,
                     style = MaterialTheme.typography.labelSmall
                   )
                 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.height(32.dp)
               )
             }
           }
         }
       }
 
+      // ── 배치 확인 다이얼로그 ─────────────────────────────────────
       if (showGhost) {
         Card(
           modifier = Modifier
-            .align(Alignment.TopCenter)
-            .padding(top = if (availableModels.isNotEmpty()) 220.dp else 160.dp)
+            .align(Alignment.Center)
             .padding(horizontal = 48.dp),
           colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f)
@@ -1044,254 +1040,319 @@ fun ArScreenContent(
         }
       }
 
+      // ── 우측 아이콘 FAB 툴바 ─────────────────────────────────────
+      Column(
+        modifier = Modifier
+          .align(Alignment.CenterEnd)
+          .padding(end = 12.dp)
+          .padding(top = 100.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+      ) {
+        // Ruler 토글
+        ArFabButton(
+          emoji = "📏",
+          label = if (isRulerModeActive) "자\nON" else "자",
+          isActive = isRulerModeActive,
+          onClick = { onToggleRulerMode(); activePanelKey = if (isRulerModeActive) null else "ruler" }
+        )
+        // Calibration
+        ArFabButton(
+          emoji = "🎚",
+          label = "보정",
+          isActive = activePanelKey == "calibration",
+          onClick = { activePanelKey = if (activePanelKey == "calibration") null else "calibration" }
+        )
+        // 추천 가구
+        ArFabButton(
+          emoji = "🛋",
+          label = "추천",
+          isActive = activePanelKey == "recommend",
+          onClick = { activePanelKey = if (activePanelKey == "recommend") null else "recommend" }
+        )
+        // 캡처
+        ArFabButton(
+          emoji = "📷",
+          label = "캡처",
+          isActive = false,
+          onClick = onScreenshot
+        )
+        // Undo
+        ArFabButton(
+          emoji = "↩",
+          label = "취소",
+          isActive = false,
+          enabled = canUndo,
+          onClick = onUndo
+        )
+        // Redo
+        ArFabButton(
+          emoji = "↪",
+          label = "재실행",
+          isActive = false,
+          enabled = canRedo,
+          onClick = onRedo
+        )
+        // 모두 지우기 (배치된 것 있고 선택 없을 때)
+        if (placedItems.isNotEmpty() && selectedItemId == null && !showGhost) {
+          ArFabButton(
+            emoji = "🗑",
+            label = "전체\n삭제",
+            isActive = false,
+            tint = MaterialTheme.colorScheme.error,
+            onClick = onClearAll
+          )
+        }
+      }
+
+      // ── 하단 슬라이드업 패널 영역 ─────────────────────────────────
       Column(
         modifier = Modifier
           .align(Alignment.BottomCenter)
-          .padding(24.dp)
-          .fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+          .fillMaxWidth()
+          .padding(bottom = 16.dp, start = 12.dp, end = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        // Ruler Mode Overlay
-        Card(
-          modifier = Modifier.padding(bottom = 8.dp),
-          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+
+        // [선택된 가구 설정 패널] — 가구 선택 시 항상 표시
+        AnimatedVisibility(
+          visible = selectedItem != null,
+          enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+          exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
         ) {
-          Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
+          if (selectedItem != null) {
+            Card(
+              colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+              ),
+              elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
             ) {
-              Text("Ruler Mode", style = MaterialTheme.typography.titleMedium)
-              Button(onClick = onToggleRulerMode) {
-                Text(if (isRulerModeActive) "자 모드 끄기" else "자 모드 켜기")
-              }
-            }
-            if (isRulerModeActive) {
-              Spacer(modifier = Modifier.height(8.dp))
-              Text("거리: ${"%.1f".format(measuredDistanceCm)}cm", style = MaterialTheme.typography.bodyLarge)
-              Spacer(modifier = Modifier.height(4.dp))
-              Button(onClick = onClearRuler) {
-                Text("자 지우기")
+              Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Text(
+                    text = selectedItem.modelName,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                  )
+                  Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    OutlinedButton(
+                      onClick = onDeselect,
+                      modifier = Modifier.height(32.dp),
+                      contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) { Text("해제", style = MaterialTheme.typography.labelSmall) }
+                    Button(
+                      onClick = { onDeleteItem(selectedItem) },
+                      colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                      modifier = Modifier.height(32.dp),
+                      contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) { Text("삭제", style = MaterialTheme.typography.labelSmall) }
+                  }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                // 이동 패드
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.Center,
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  OutlinedIconButton(onClick = { onNudge(selectedItem, -NUDGE_STEP_M, 0f) }, modifier = Modifier.size(36.dp)) {
+                    Text("←", style = MaterialTheme.typography.labelMedium)
+                  }
+                  Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                  ) {
+                    OutlinedIconButton(onClick = { onNudge(selectedItem, 0f, -NUDGE_STEP_M) }, modifier = Modifier.size(36.dp)) {
+                      Text("↑", style = MaterialTheme.typography.labelMedium)
+                    }
+                    OutlinedIconButton(onClick = { onNudge(selectedItem, 0f, NUDGE_STEP_M) }, modifier = Modifier.size(36.dp)) {
+                      Text("↓", style = MaterialTheme.typography.labelMedium)
+                    }
+                  }
+                  OutlinedIconButton(onClick = { onNudge(selectedItem, NUDGE_STEP_M, 0f) }, modifier = Modifier.size(36.dp)) {
+                    Text("→", style = MaterialTheme.typography.labelMedium)
+                  }
+                  Spacer(modifier = Modifier.width(12.dp))
+                  // 회전
+                  Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    OutlinedIconButton(onClick = { onRotateLeft(selectedItem) }, modifier = Modifier.size(36.dp)) {
+                      Text("↺", style = MaterialTheme.typography.labelMedium)
+                    }
+                    OutlinedIconButton(onClick = { onRotateRight(selectedItem) }, modifier = Modifier.size(36.dp)) {
+                      Text("↻", style = MaterialTheme.typography.labelMedium)
+                    }
+                  }
+                  Spacer(modifier = Modifier.width(12.dp))
+                  // 투명도 + 벽 정렬
+                  Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                  ) {
+                    Text(
+                      text = "투명도 ${(selectedItem.opacity * 100).toInt()}%",
+                      style = MaterialTheme.typography.labelSmall
+                    )
+                    Slider(
+                      value = selectedItem.opacity,
+                      onValueChange = { onOpacityChange(selectedItem, it) },
+                      valueRange = 0.1f..1.0f,
+                      modifier = Modifier.fillMaxWidth()
+                    )
+                    if (hasVerticalPlane) {
+                      OutlinedButton(
+                        onClick = { onAlignToWall(selectedItem) },
+                        modifier = Modifier.fillMaxWidth().height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                      ) { Text("벽에 정렬", style = MaterialTheme.typography.labelSmall) }
+                    }
+                  }
+                }
               }
             }
           }
         }
 
-        // Calibration Card
-        if (selectedItemId == null) {
+        // [Ruler 패널] — Ruler FAB 탭 시 표시
+        AnimatedVisibility(
+          visible = activePanelKey == "ruler" && isRulerModeActive,
+          enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+          exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+        ) {
           Card(
-            modifier = Modifier.padding(bottom = 8.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
           ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-              Text("보정 계수: ${"%.2f".format(calibrationFactor)}", style = MaterialTheme.typography.bodyMedium)
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Column {
+                Text("📏 자 모드", style = MaterialTheme.typography.titleSmall)
+                if (measuredDistanceCm > 0f) {
+                  Text(
+                    text = "측정 거리: ${"%.1f".format(measuredDistanceCm)} cm",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                  )
+                } else {
+                  Text("바닥을 두 번 탭하세요", style = MaterialTheme.typography.bodySmall)
+                }
+              }
+              OutlinedButton(
+                onClick = onClearRuler,
+                modifier = Modifier.height(36.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp)
+              ) { Text("자 지우기", style = MaterialTheme.typography.labelSmall) }
+            }
+          }
+        }
+
+        // [Calibration 패널] — 보정 FAB 탭 시 표시
+        AnimatedVisibility(
+          visible = activePanelKey == "calibration",
+          enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+          exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+        ) {
+          Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
+          ) {
+            Column(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+            ) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+              ) {
+                Text("🎚 크기 보정", style = MaterialTheme.typography.titleSmall)
+                Text(
+                  text = "${"%.0f".format(calibrationFactor * 100)}%",
+                  style = MaterialTheme.typography.titleSmall,
+                  color = MaterialTheme.colorScheme.primary
+                )
+              }
               Slider(
                 value = calibrationFactor,
                 onValueChange = onCalibrationFactorChange,
                 valueRange = 0.8f..1.2f,
+                steps = 7,
                 modifier = Modifier.fillMaxWidth()
               )
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+              ) {
+                Text("80%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("100%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("120%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              }
             }
           }
         }
 
-        // Recommendation Panel Card
-        Card(
-          modifier = Modifier.padding(bottom = 8.dp),
-          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+        // [추천 가구 패널] — 추천 FAB 탭 시 표시
+        AnimatedVisibility(
+          visible = activePanelKey == "recommend",
+          enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+          exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
         ) {
-          Column(modifier = Modifier.padding(16.dp)) {
-            Text("추천 가구", style = MaterialTheme.typography.titleMedium)
-            if (safetyWarning != null) {
-              Text(safetyWarning, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-              modifier = Modifier.horizontalScroll(rememberScrollState()),
-              horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-              recommendedFurniture.forEach { furniture ->
-                Button(onClick = { onSelectRecommended(furniture) }) {
-                  Text("${furniture.name} (${furniture.widthCm.toInt()}x${furniture.heightCm.toInt()})")
-                }
-              }
-            }
-          }
-        }
-
-        if (selectedItem != null) {
           Card(
-            modifier = Modifier.padding(bottom = 8.dp),
-            colors = CardDefaults.cardColors(
-              containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
           ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-              Text(
-                text = "선택된 제품 설정 (${selectedItem.modelName})",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-              )
-
-              if (placedItems.size > 1) {
-                val nearest = placedItems
-                  .filter { it.id != selectedItem.id }
-                  .minByOrNull {
-                    val p1 = selectedItem.anchor.pose
-                    val p2 = it.anchor.pose
-                    val dx = p1.tx() - p2.tx()
-                    val dy = p1.ty() - p2.ty()
-                    val dz = p1.tz() - p2.tz()
-                    dx * dx + dy * dy + dz * dz
-                  }
-                if (nearest != null) {
-                  val p1 = selectedItem.anchor.pose
-                  val p2 = nearest.anchor.pose
-                  val dx = p1.tx() - p2.tx()
-                  val dy = p1.ty() - p2.ty()
-                  val dz = p1.tz() - p2.tz()
-                  val distCm = sqrt(dx * dx + dy * dy + dz * dz) * 100f
-                  Text(
-                    text = "가장 가까운 아이템과 거리: ${"%.1f".format(distCm)}cm",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary
-                  )
-                }
+            Column(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+            ) {
+              Text("🛋 추천 가구", style = MaterialTheme.typography.titleSmall)
+              if (safetyWarning != null) {
+                Text(safetyWarning, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
               }
-
-              Spacer(modifier = Modifier.height(8.dp))
-              Text(
-                text = "위치 미세 조정 (5cm)",
-                style = MaterialTheme.typography.bodySmall
-              )
+              if (measuredDistanceCm > 0f) {
+                Text(
+                  text = "공간 ${"%.0f".format(measuredDistanceCm)}cm 기준 필터링",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.secondary
+                )
+              }
+              Spacer(modifier = Modifier.height(6.dp))
               Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-              ) {
-                OutlinedButton(onClick = { onNudge(selectedItem, -NUDGE_STEP_M, 0f) }, modifier = Modifier.padding(2.dp)) { Text("←") }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                  OutlinedButton(onClick = { onNudge(selectedItem, 0f, -NUDGE_STEP_M) }, modifier = Modifier.padding(2.dp)) { Text("↑") }
-                  OutlinedButton(onClick = { onNudge(selectedItem, 0f, NUDGE_STEP_M) }, modifier = Modifier.padding(2.dp)) { Text("↓") }
-                }
-                OutlinedButton(onClick = { onNudge(selectedItem, NUDGE_STEP_M, 0f) }, modifier = Modifier.padding(2.dp)) { Text("→") }
-              }
-
-              if (hasVerticalPlane) {
-                OutlinedButton(
-                  onClick = { onAlignToWall(selectedItem) },
-                  modifier = Modifier.fillMaxWidth()
-                ) { Text("벽에 정렬") }
-              }
-
-              Spacer(modifier = Modifier.height(8.dp))
-              Text(
-                text = "투명도 조절: ${(selectedItem.opacity * 100).toInt()}%",
-                style = MaterialTheme.typography.bodySmall
-              )
-              Slider(
-                value = selectedItem.opacity,
-                onValueChange = { newOpacity -> onOpacityChange(selectedItem, newOpacity) },
-                valueRange = 0.1f..1.0f,
-                modifier = Modifier.fillMaxWidth()
-              )
-
-              Spacer(modifier = Modifier.height(4.dp))
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-              ) {
-                Button(onClick = { onRotateLeft(selectedItem) }, modifier = Modifier.weight(1f)) { Text("◀ 15°") }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = { onRotateRight(selectedItem) }, modifier = Modifier.weight(1f)) { Text("15° ▶") }
-              }
-
-              Spacer(modifier = Modifier.height(8.dp))
-              Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                  .horizontalScroll(rememberScrollState())
+                  .fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
               ) {
-                OutlinedButton(onClick = onDeselect, modifier = Modifier.weight(1f)) { Text("선택 해제") }
-                Button(
-                  onClick = { onDeleteItem(selectedItem) },
-                  colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                  modifier = Modifier.weight(1f)
-                ) { Text("삭제") }
-              }
-            }
-          }
-        }
-
-        if (placedItems.isNotEmpty() && selectedItemId == null) {
-          Card(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(bottom = 4.dp),
-            colors = CardDefaults.cardColors(
-              containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
-            )
-          ) {
-            Row(
-              modifier = Modifier
-                .horizontalScroll(rememberScrollState())
-                .padding(8.dp),
-              horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-              placedItems.forEachIndexed { idx, item ->
-                Surface(
-                  color = MaterialTheme.colorScheme.primaryContainer,
-                  shape = RoundedCornerShape(8.dp)
-                ) {
-                  Text(
-                    text = "#${idx+1} ${item.widthCm.toInt()}×${item.heightCm.toInt()}×${item.depthCm.toInt()}cm",
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                  )
+                recommendedFurniture.forEach { furniture ->
+                  ElevatedButton(
+                    onClick = {
+                      onSelectRecommended(furniture)
+                      activePanelKey = null
+                    },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                  ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                      Text(furniture.name, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                      Text(
+                        text = "${furniture.widthCm.toInt()}×${furniture.depthCm.toInt()}cm",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        color = LocalContentColor.current.copy(alpha = 0.7f)
+                      )
+                    }
+                  }
+                }
+                if (recommendedFurniture.isEmpty()) {
+                  Text("해당 공간에 맞는 가구가 없습니다", style = MaterialTheme.typography.bodySmall)
                 }
               }
             }
           }
-        }
-
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-          Button(
-            onClick = onUndo,
-            enabled = canUndo,
-            modifier = Modifier.weight(1f)
-          ) { Text("실행 취소") }
-          Button(
-            onClick = onRedo,
-            enabled = canRedo,
-            modifier = Modifier.weight(1f)
-          ) { Text("다시 실행") }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-          if (placedItems.isNotEmpty() && selectedItemId == null && !showGhost) {
-            Button(
-              onClick = onClearAll,
-              colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-              modifier = Modifier.weight(1f)
-            ) { Text("모두 지우기") }
-          }
-          Button(
-            onClick = onScreenshot,
-            modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
-          ) { Text("캡처") }
-          Button(
-            onClick = onBack,
-            modifier = Modifier.weight(1f)
-          ) { Text("뒤로 가기") }
         }
       }
 
@@ -1315,6 +1376,58 @@ fun ArScreenContent(
 // =============================================================================
 // Premium UX Helpers & Animated Onboarding
 // =============================================================================
+
+@Composable
+fun ArFabButton(
+  emoji: String,
+  label: String,
+  isActive: Boolean,
+  onClick: () -> Unit,
+  enabled: Boolean = true,
+  tint: Color = Color.Unspecified
+) {
+  val containerColor = if (isActive)
+    MaterialTheme.colorScheme.primary
+  else
+    MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
+  val contentColor = if (isActive)
+    MaterialTheme.colorScheme.onPrimary
+  else if (tint != Color.Unspecified) tint
+  else MaterialTheme.colorScheme.onSurface
+
+  Surface(
+    shape = RoundedCornerShape(12.dp),
+    color = containerColor,
+    shadowElevation = if (isActive) 6.dp else 2.dp,
+    modifier = Modifier
+      .size(width = 52.dp, height = 52.dp)
+      .then(
+        if (enabled) Modifier.clickable { onClick() }
+        else Modifier
+      )
+  ) {
+    Column(
+      modifier = Modifier.fillMaxSize(),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.Center
+    ) {
+      Text(
+        text = emoji,
+        fontSize = 18.sp,
+        textAlign = TextAlign.Center,
+        color = if (!enabled) contentColor.copy(alpha = 0.38f) else contentColor
+      )
+      Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+        color = if (!enabled) contentColor.copy(alpha = 0.38f) else contentColor,
+        textAlign = TextAlign.Center,
+        maxLines = 2,
+        lineHeight = 9.sp
+      )
+    }
+  }
+}
 
 @Composable
 fun ScanGuideOverlay() {
