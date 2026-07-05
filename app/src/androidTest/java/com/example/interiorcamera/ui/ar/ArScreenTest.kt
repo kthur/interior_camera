@@ -34,7 +34,7 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = {},
         onDeselect = {},
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = {}
       )
     }
@@ -59,7 +59,7 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = {},
         onDeselect = {},
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = {}
       )
     }
@@ -83,7 +83,7 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = {},
         onDeselect = {},
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = {}
       )
     }
@@ -107,7 +107,7 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = {},
         onDeselect = {},
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = {}
       )
     }
@@ -137,7 +137,7 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = {},
         onDeselect = {},
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = {}
       )
     }
@@ -168,7 +168,7 @@ class ArScreenTest {
         onRotateLeft = { rotateLeftClicked = true },
         onRotateRight = {},
         onDeselect = {},
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = {}
       )
     }
@@ -195,7 +195,7 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = { rotateRightClicked = true },
         onDeselect = {},
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = {}
       )
     }
@@ -222,7 +222,7 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = {},
         onDeselect = {},
-        onDelete = { deleteClicked = true },
+        onDeleteItem = { deleteClicked = true },
         onClearAll = {}
       )
     }
@@ -249,7 +249,7 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = {},
         onDeselect = {},
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = { clearAllClicked = true }
       )
     }
@@ -276,7 +276,7 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = {},
         onDeselect = {},
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = {}
       )
     }
@@ -301,7 +301,7 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = {},
         onDeselect = {},
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = {}
       )
     }
@@ -325,7 +325,7 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = {},
         onDeselect = {},
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = {}
       )
     }
@@ -349,7 +349,7 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = {},
         onDeselect = {},
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = {}
       )
     }
@@ -374,7 +374,7 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = {},
         onDeselect = {},
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = {}
       )
     }
@@ -400,12 +400,333 @@ class ArScreenTest {
         onRotateLeft = {},
         onRotateRight = {},
         onDeselect = { deselectClicked = true },
-        onDelete = {},
+        onDeleteItem = {},
         onClearAll = {}
       )
     }
 
     composeTestRule.onNodeWithText("선택 해제").performClick()
     assertTrue(deselectClicked)
+  }
+
+  @Test
+  fun testRulerMode_UIOverlayDisplaysDistance() {
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = true,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("Ruler Mode").assertExists()
+    composeTestRule.onNodeWithText("자 모드 끄기").assertExists()
+    composeTestRule.onNodeWithText("거리: 125.5cm").assertExists()
+  }
+
+  @Test
+  fun testCalibrationSlider_InitialValue() {
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = true,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("보정 계수: 1.00").assertExists()
+  }
+
+  @Test
+  fun testCalibrationSlider_UIVisibility() {
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = true,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("보정 계수: 1.15").assertExists()
+  }
+
+  @Test
+  fun testRecommendationPanel_UIVisibility() {
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = true,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("추천 가구").assertExists()
+    composeTestRule.onNodeWithText("Sofa (150x85)").assertExists()
+  }
+
+  @Test
+  fun testRecommendationPanel_SelectAndPlace() {
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = true,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("Chair (60x90)").performClick()
+  }
+
+  @Test
+  fun testRulerAndRecommendation_AutoPopulateSpace() {
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = true,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("거리: 150.0cm").assertExists()
+    composeTestRule.onNodeWithText("Table (120x75)").assertExists()
+  }
+
+  @Test
+  fun testRulerAndRecommendation_ClearRulerResetsPanel() {
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = true,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("자 지우기").performClick()
+  }
+
+  @Test
+  fun testCalibrationAndRecommendation_RealtimeSafetyWarning() {
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = true,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("공간 부족: 안전 마진 최소 5cm 필요").assertExists()
+  }
+
+  @Test
+  fun testWorkflow_MeasureSpaceAndPlaceMatchingFurniture() {
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = true,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("거리: 180.0cm").assertExists()
+    composeTestRule.onNodeWithText("Bed (160x45)").performClick()
+  }
+
+  @Test
+  fun testWorkflow_CalibrateAndVerifyFitWithClearance() {
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = true,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("보정 계수: 1.10").assertExists()
+  }
+
+  @Test
+  fun testWorkflow_DynamicReMeasurement() {
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = true,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("거리: 100.0cm").assertExists()
+
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = true,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("거리: 200.0cm").assertExists()
+  }
+
+  @Test
+  fun testWorkflow_TrackingLossRecoveryDuringMeasurement() {
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = false,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("카메라를 천천히 좌우로 흔들면서 바닥면이나 평평한 표면을 비춰주세요.").assertExists()
+
+    composeTestRule.setContent {
+      ArScreenContent(
+        widthCm = 100f,
+        heightCm = 200f,
+        depthCm = 60f,
+        hasCameraPermission = true,
+        placedItems = emptyList(),
+        selectedItemId = null,
+        isPlaneDetected = true,
+        onBack = {},
+        onOpacityChange = { _, _ -> },
+        onRotateLeft = {},
+        onRotateRight = {},
+        onDeselect = {},
+        onDeleteItem = {},
+        onClearAll = {}
+      )
+    }
+    composeTestRule.onNodeWithText("카메라를 천천히 좌우로 흔들면서 바닥면이나 평평한 표면을 비춰주세요.").assertDoesNotExist()
   }
 }

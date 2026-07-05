@@ -37,18 +37,19 @@ import com.google.ar.core.HitResult
 import com.google.ar.core.Plane
 import com.google.ar.core.Pose
 import com.google.ar.core.TrackingState
-import io.github.sceneview.ar.ARSceneView
-import io.github.sceneview.ar.node.AnchorNode
-import io.github.sceneview.rememberOnGestureListener
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Scale
 import io.github.sceneview.math.Rotation
+import io.github.sceneview.ar.ARSceneView
+import io.github.sceneview.ar.node.AnchorNode
+import io.github.sceneview.rememberOnGestureListener
 import io.github.sceneview.node.ModelNode
 import io.github.sceneview.node.Node
 import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberModelInstance
 import io.github.sceneview.rememberModelLoader
 import com.example.interiorcamera.ArItem
+import com.example.interiorcamera.data.RecommendedFurniture
 import kotlin.math.atan2
 import kotlin.math.sqrt
 
@@ -120,6 +121,51 @@ fun ArScreen(
   var captureRequested by remember { mutableStateOf(false) }
   var selectedModelIndex by remember { mutableStateOf(-1) }
   var hasVerticalPlane by remember { mutableStateOf(false) }
+
+  var isRulerMode by remember { mutableStateOf(false) }
+  var rulerPointA by remember { mutableStateOf<Anchor?>(null) }
+  var rulerPointB by remember { mutableStateOf<Anchor?>(null) }
+  var currentCalibrationFactor by remember { mutableStateOf(calibrationFactor) }
+
+  LaunchedEffect(calibrationFactor) {
+    currentCalibrationFactor = calibrationFactor
+  }
+
+  val catalog = remember {
+    listOf(
+      RecommendedFurniture("Cozy Sofa", 160f, 85f, 90f, "cube.glb"),
+      RecommendedFurniture("Wooden Dining Table", 140f, 75f, 80f, "cube.glb"),
+      RecommendedFurniture("Modern Desk", 120f, 75f, 60f, "cube.glb"),
+      RecommendedFurniture("Kitchen Cabinet", 80f, 180f, 50f, "refrigerator.glb"),
+      RecommendedFurniture("Single Bed", 100f, 45f, 200f, "cube.glb")
+    )
+  }
+
+  val measuredDistance = remember(rulerPointA, rulerPointB, currentCalibrationFactor) {
+    if (rulerPointA != null && rulerPointB != null) {
+      val poseA = rulerPointA!!.pose
+      val poseB = rulerPointB!!.pose
+      val dx = poseB.tx() - poseA.tx()
+      val dy = poseB.ty() - poseA.ty()
+      val dz = poseB.tz() - poseA.tz()
+      val dist = sqrt(dx * dx + dy * dy + dz * dz)
+      dist * 100f * currentCalibrationFactor
+    } else 0f
+  }
+
+  val recommendedFurniture = remember(measuredDistance) {
+    if (measuredDistance > 0f) {
+      catalog.filter { it.widthCm <= (measuredDistance - 5f) }
+    } else {
+      catalog
+    }
+  }
+
+  val safetyWarning = remember(measuredDistance, recommendedFurniture) {
+    if (measuredDistance > 0f && recommendedFurniture.isEmpty()) {
+      "측정된 공간(${measuredDistance.toInt()}cm)이 가구 크기에 비해 좁습니다 (안전 마진 5cm 기준)."
+    } else null
+  }
 
   val multiWidthCm = if (selectedModelIndex in availableModels.indices) availableModels[selectedModelIndex].widthCm else widthCm
   val multiHeightCm = if (selectedModelIndex in availableModels.indices) availableModels[selectedModelIndex].heightCm else heightCm
@@ -354,6 +400,69 @@ fun ArScreen(
         }
       } catch (_: Exception) {}
     },
+    isRulerModeActive = isRulerMode,
+    measuredDistanceCm = measuredDistance,
+    calibrationFactor = currentCalibrationFactor,
+    rulerPointA = rulerPointA,
+    rulerPointB = rulerPointB,
+    recommendedFurniture = recommendedFurniture,
+    safetyWarning = safetyWarning,
+    onToggleRulerMode = {
+      isRulerMode = !isRulerMode
+    },
+    onClearRuler = {
+      try { rulerPointA?.detach() } catch (_: Exception) {}
+      try { rulerPointB?.detach() } catch (_: Exception) {}
+      rulerPointA = null
+      rulerPointB = null
+    },
+    onCalibrationFactorChange = {
+      currentCalibrationFactor = it
+    },
+    onSelectRecommended = { furniture ->
+      try {
+        var targetAnchor: Anchor? = rulerPointB
+        if (targetAnchor == null) {
+          targetAnchor = rulerPointA
+        }
+        var finalAnchor = targetAnchor
+        if (finalAnchor == null) {
+          frame?.camera?.pose?.let { camPose ->
+            val forwardVec = FloatArray(3)
+            camPose.getTransformedAxis(2, -1.0f, forwardVec, 0)
+            val tx = camPose.tx() + forwardVec[0]
+            val ty = camPose.ty() + forwardVec[1]
+            val tz = camPose.tz() + forwardVec[2]
+            val floorY = arSession?.getAllTrackables(Plane::class.java)
+              ?.filter { it.type == Plane.Type.HORIZONTAL_UPWARD_FACING }
+              ?.minOfOrNull { it.centerPose.ty() } ?: ty
+            
+            val targetPose = Pose(floatArrayOf(tx, floorY, tz), camPose.rotationQuaternion)
+            finalAnchor = arSession?.createAnchor(targetPose)
+          }
+        }
+        
+        finalAnchor?.let { anchor ->
+          val newAnchor = arSession?.createAnchor(anchor.pose)
+          if (newAnchor != null) {
+            val newItem = PlacedItem(
+              id = java.util.UUID.randomUUID().toString(),
+              anchor = newAnchor,
+              widthCm = furniture.widthCm,
+              heightCm = furniture.heightCm,
+              depthCm = furniture.depthCm,
+              modelName = furniture.modelName,
+              rotationDegrees = 0f,
+              opacity = 0.8f
+            )
+            placedItems = placedItems + newItem
+            selectedItemId = newItem.id
+            pushAction(ArAction.Place(newItem))
+            Toast.makeText(context, "${furniture.name}이 배치되었습니다.", Toast.LENGTH_SHORT).show()
+          }
+        }
+      } catch (_: Exception) {}
+    },
     modifier = modifier,
     arSceneViewContent = {
       if (hasCameraPermission) {
@@ -390,31 +499,48 @@ fun ArScreen(
           },
           onGestureListener = rememberOnGestureListener(
             onSingleTapConfirmed = { motionEvent: MotionEvent, node: Node? ->
-              if (node != null) {
-                var parentNode: Node? = node
-                while (parentNode != null && parentNode !is AnchorNode) {
-                  parentNode = parentNode.parent
-                }
-                if (parentNode is AnchorNode) {
-                  val anchorRef = parentNode.anchor
-                  val found = placedItems.find { it.anchor == anchorRef }
-                  if (found != null) {
-                    ghostAnchor?.let { try { it.detach() } catch (_: Exception) {} }
-                    ghostAnchor = null
-                    showGhost = false
-                    selectedItemId = found.id
-                  }
-                }
-              } else {
+              if (isRulerMode) {
                 val hitResults = frame?.hitTest(motionEvent.x, motionEvent.y)
                 val bestHit = selectBestHit(hitResults)
                 if (bestHit != null) {
-                  ghostAnchor?.let { try { it.detach() } catch (_: Exception) {} }
-                  ghostAnchor = bestHit.createAnchor()
-                  showGhost = true
-                  selectedItemId = null
+                  if (rulerPointA == null) {
+                    rulerPointA = bestHit.createAnchor()
+                  } else if (rulerPointB == null) {
+                    rulerPointB = bestHit.createAnchor()
+                  } else {
+                    try { rulerPointA?.detach() } catch (_: Exception) {}
+                    try { rulerPointB?.detach() } catch (_: Exception) {}
+                    rulerPointA = bestHit.createAnchor()
+                    rulerPointB = null
+                  }
+                }
+              } else {
+                if (node != null) {
+                  var parentNode: Node? = node
+                  while (parentNode != null && parentNode !is AnchorNode) {
+                    parentNode = parentNode.parent
+                  }
+                  if (parentNode is AnchorNode) {
+                    val anchorRef = parentNode.anchor
+                    val found = placedItems.find { it.anchor == anchorRef }
+                    if (found != null) {
+                      ghostAnchor?.let { try { it.detach() } catch (_: Exception) {} }
+                      ghostAnchor = null
+                      showGhost = false
+                      selectedItemId = found.id
+                    }
+                  }
                 } else {
-                  selectedItemId = null
+                  val hitResults = frame?.hitTest(motionEvent.x, motionEvent.y)
+                  val bestHit = selectBestHit(hitResults)
+                  if (bestHit != null) {
+                    ghostAnchor?.let { try { it.detach() } catch (_: Exception) {} }
+                    ghostAnchor = bestHit.createAnchor()
+                    showGhost = true
+                    selectedItemId = null
+                  } else {
+                    selectedItemId = null
+                  }
                 }
               }
               true
@@ -519,6 +645,78 @@ fun ArScreen(
               }
             }
           }
+
+          if (rulerPointA != null) {
+            AnchorNode(anchor = rulerPointA!!) {
+              val pointInstance = rememberModelInstance(modelLoader, "models/cube.glb")
+              LaunchedEffect(pointInstance) {
+                pointInstance?.let { mi ->
+                  mi.materialInstances.forEach { mat ->
+                    try { mat.setParameter("baseColorFactor", 1.0f, 0.0f, 0.0f, 1.0f) } catch (_: Exception) {}
+                  }
+                }
+              }
+              if (pointInstance != null) {
+                ModelNode(
+                  modelInstance = pointInstance,
+                  scale = Scale(0.015f, 0.015f, 0.015f),
+                  position = Position(0f, 0f, 0f)
+                )
+              }
+            }
+          }
+
+          if (rulerPointB != null) {
+            AnchorNode(anchor = rulerPointB!!) {
+              val pointInstance = rememberModelInstance(modelLoader, "models/cube.glb")
+              LaunchedEffect(pointInstance) {
+                pointInstance?.let { mi ->
+                  mi.materialInstances.forEach { mat ->
+                    try { mat.setParameter("baseColorFactor", 1.0f, 0.0f, 0.0f, 1.0f) } catch (_: Exception) {}
+                  }
+                }
+              }
+              if (pointInstance != null) {
+                ModelNode(
+                  modelInstance = pointInstance,
+                  scale = Scale(0.015f, 0.015f, 0.015f),
+                  position = Position(0f, 0f, 0f)
+                )
+              }
+            }
+          }
+
+          if (rulerPointA != null && rulerPointB != null) {
+            val poseA = rulerPointA!!.pose
+            val poseB = rulerPointB!!.pose
+
+            val dx = poseB.tx() - poseA.tx()
+            val dy = poseB.ty() - poseA.ty()
+            val dz = poseB.tz() - poseA.tz()
+            val dist = sqrt(dx * dx + dy * dy + dz * dz)
+
+            val yaw = Math.toDegrees(atan2(dx.toDouble(), dz.toDouble())).toFloat()
+            val pitch = Math.toDegrees(-atan2(dy.toDouble(), sqrt((dx * dx + dz * dz).toDouble()))).toFloat()
+
+            AnchorNode(anchor = rulerPointA!!) {
+              val lineInstance = rememberModelInstance(modelLoader, "models/cube.glb")
+              LaunchedEffect(lineInstance) {
+                lineInstance?.let { mi ->
+                  mi.materialInstances.forEach { mat ->
+                    try { mat.setParameter("baseColorFactor", 1.0f, 0.0f, 0.0f, 1.0f) } catch (_: Exception) {}
+                  }
+                }
+              }
+              if (lineInstance != null) {
+                ModelNode(
+                  modelInstance = lineInstance,
+                  scale = Scale(0.005f, 0.005f, dist),
+                  rotation = Rotation(pitch, yaw, 0f),
+                  position = Position(dx / 2f, dy / 2f, dz / 2f)
+                )
+              }
+            }
+          }
         }
       }
     }
@@ -558,6 +756,17 @@ fun ArScreenContent(
   onSelectModel: (Int) -> Unit = {},
   hasVerticalPlane: Boolean = false,
   onAlignToWall: (PlacedItem) -> Unit = {},
+  isRulerModeActive: Boolean = false,
+  measuredDistanceCm: Float = 0f,
+  calibrationFactor: Float = 1.0f,
+  rulerPointA: Anchor? = null,
+  rulerPointB: Anchor? = null,
+  recommendedFurniture: List<RecommendedFurniture> = emptyList(),
+  safetyWarning: String? = null,
+  onToggleRulerMode: () -> Unit = {},
+  onClearRuler: () -> Unit = {},
+  onCalibrationFactorChange: (Float) -> Unit = {},
+  onSelectRecommended: (RecommendedFurniture) -> Unit = {},
   modifier: Modifier = Modifier,
   arSceneViewContent: @Composable BoxScope.() -> Unit = {}
 ) {
@@ -670,6 +879,54 @@ fun ArScreenContent(
                         )
                       }
                     }
+                  }
+                }
+              }
+            }
+
+            if (rulerPointA != null && rulerPointB != null) {
+              val poseA = rulerPointA.pose
+              val poseB = rulerPointB.pose
+              val dx = poseB.tx() - poseA.tx()
+              val dy = poseB.ty() - poseA.ty()
+              val dz = poseB.tz() - poseA.tz()
+              val dist = sqrt(dx * dx + dy * dy + dz * dz)
+
+              val midX = (poseA.tx() + poseB.tx()) / 2f
+              val midY = (poseA.ty() + poseB.ty()) / 2f
+              val midZ = (poseA.tz() + poseB.tz()) / 2f
+
+              val midPt = projectWorldToScreen(
+                midX, midY, midZ,
+                viewMatrix, projectionMatrix, viewportWidth, viewportHeight
+              )
+
+              if (midPt != null) {
+                val density = LocalContext.current.resources.displayMetrics.density
+                val leftDp = (midPt.x / density).dp
+                val topDp = (midPt.y / density).dp
+
+                Box(
+                  modifier = Modifier
+                    .offset(x = leftDp - 70.dp, y = topDp - 30.dp)
+                    .wrapContentSize()
+                ) {
+                  Card(
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(
+                      containerColor = MaterialTheme.colorScheme.tertiary
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                  ) {
+                    Text(
+                      text = "${"%.1f".format(dist * 100f * calibrationFactor)} cm",
+                      modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                      style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 12.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                      ),
+                      color = MaterialTheme.colorScheme.onTertiary
+                    )
                   }
                 }
               }
@@ -794,6 +1051,75 @@ fun ArScreenContent(
           .fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
       ) {
+        // Ruler Mode Overlay
+        Card(
+          modifier = Modifier.padding(bottom = 8.dp),
+          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+        ) {
+          Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Text("Ruler Mode", style = MaterialTheme.typography.titleMedium)
+              Button(onClick = onToggleRulerMode) {
+                Text(if (isRulerModeActive) "자 모드 끄기" else "자 모드 켜기")
+              }
+            }
+            if (isRulerModeActive) {
+              Spacer(modifier = Modifier.height(8.dp))
+              Text("거리: ${"%.1f".format(measuredDistanceCm)}cm", style = MaterialTheme.typography.bodyLarge)
+              Spacer(modifier = Modifier.height(4.dp))
+              Button(onClick = onClearRuler) {
+                Text("자 지우기")
+              }
+            }
+          }
+        }
+
+        // Calibration Card
+        if (selectedItemId == null) {
+          Card(
+            modifier = Modifier.padding(bottom = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+          ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+              Text("보정 계수: ${"%.2f".format(calibrationFactor)}", style = MaterialTheme.typography.bodyMedium)
+              Slider(
+                value = calibrationFactor,
+                onValueChange = onCalibrationFactorChange,
+                valueRange = 0.8f..1.2f,
+                modifier = Modifier.fillMaxWidth()
+              )
+            }
+          }
+        }
+
+        // Recommendation Panel Card
+        Card(
+          modifier = Modifier.padding(bottom = 8.dp),
+          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+        ) {
+          Column(modifier = Modifier.padding(16.dp)) {
+            Text("추천 가구", style = MaterialTheme.typography.titleMedium)
+            if (safetyWarning != null) {
+              Text(safetyWarning, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+              modifier = Modifier.horizontalScroll(rememberScrollState()),
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              recommendedFurniture.forEach { furniture ->
+                Button(onClick = { onSelectRecommended(furniture) }) {
+                  Text("${furniture.name} (${furniture.widthCm.toInt()}x${furniture.heightCm.toInt()})")
+                }
+              }
+            }
+          }
+        }
+
         if (selectedItem != null) {
           Card(
             modifier = Modifier.padding(bottom = 8.dp),
