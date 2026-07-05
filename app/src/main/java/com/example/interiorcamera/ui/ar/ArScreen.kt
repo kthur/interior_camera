@@ -4,7 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.Canvas
+import android.graphics.Canvas as AndroidCanvas
 import android.view.MotionEvent
 import android.widget.Toast
 import java.io.File
@@ -25,6 +25,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.core.content.ContextCompat
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import com.google.android.filament.Box
 import com.google.android.filament.RenderableManager
 import com.google.ar.core.Anchor
@@ -201,7 +204,7 @@ fun ArScreen(
         if (activity != null) {
           val view = activity.window.decorView
           val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-          val canvas = Canvas(bitmap)
+          val canvas = AndroidCanvas(bitmap)
           view.draw(canvas)
           val dir = File(context.cacheDir, "screenshots")
           dir.mkdirs()
@@ -286,8 +289,16 @@ fun ArScreen(
       try {
         val pose = item.anchor.pose
         val offset = Pose(floatArrayOf(dx, 0f, dz), floatArrayOf(0f, 0f, 0f, 1f))
-        val newPose = offset.compose(pose)
-        val newAnchor = arSession?.createAnchor(newPose)
+        var targetPose = offset.compose(pose)
+        
+        // R3: Wall snapping math integration
+        val snappedPose = findNearestVerticalPlaneSnap(arSession, targetPose, 0.15f)
+        if (snappedPose != null) {
+          targetPose = snappedPose
+          triggerHapticFeedback(context) // Haptic feedback on snap
+        }
+
+        val newAnchor = arSession?.createAnchor(targetPose)
         if (newAnchor != null) {
           placedItems = placedItems.map {
             if (it.id == item.id) it.copy(anchor = newAnchor) else it
@@ -550,10 +561,121 @@ fun ArScreenContent(
   modifier: Modifier = Modifier,
   arSceneViewContent: @Composable BoxScope.() -> Unit = {}
 ) {
-  Box(modifier = modifier.fillMaxSize()) {
+  var viewportWidth by remember { mutableStateOf(0) }
+  var viewportHeight by remember { mutableStateOf(0) }
+
+  Box(
+    modifier = modifier
+      .fillMaxSize()
+      .onGloballyPositioned { coords ->
+        viewportWidth = coords.size.width
+        viewportHeight = coords.size.height
+      }
+  ) {
     if (hasCameraPermission) {
       Box(modifier = Modifier.fillMaxSize()) {
         arSceneViewContent()
+
+        // --- UX 개선 R2 & R1: 3D 치수 레이블 및 바닥 선택 링 오버레이 ---
+        val viewMatrix = FloatArray(16)
+        val projectionMatrix = FloatArray(16)
+        var matricesValid = false
+
+        frame?.camera?.let { camera ->
+          if (camera.trackingState == TrackingState.TRACKING) {
+            camera.getViewMatrix(viewMatrix, 0)
+            camera.getProjectionMatrix(projectionMatrix, 0, 0.1f, 100f)
+            matricesValid = true
+          }
+        }
+
+        if (matricesValid && viewportWidth > 0 && viewportHeight > 0) {
+          Box(modifier = Modifier.fillMaxSize()) {
+            placedItems.forEach { item ->
+              val pose = item.anchor.pose
+
+              // 가구의 바닥 중앙 3D 월드 좌표 투영
+              val floorPt = projectWorldToScreen(
+                pose.tx(), pose.ty(), pose.tz(),
+                viewMatrix, projectionMatrix, viewportWidth, viewportHeight
+              )
+
+              // 가구의 상단 중앙 3D 월드 좌표 투영 (높이만큼 보정)
+              val topPt = projectWorldToScreen(
+                pose.tx(), pose.ty() + (item.heightCm / 100f), pose.tz(),
+                viewMatrix, projectionMatrix, viewportWidth, viewportHeight
+              )
+
+              // R1. 선택된 가구 바닥 선택 링 (Cyan glowing halo)
+              val isSelected = item.id == selectedItemId
+              if (floorPt != null && isSelected) {
+                val density = LocalContext.current.resources.displayMetrics.density
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                  val ringRadius = (item.widthCm.coerceAtLeast(item.depthCm) / 2f) * 4f * density
+                  val constrainedRadius = ringRadius.coerceIn(50f, 150f)
+
+                  // 대시 효과가 가미된 세련된 청록 가이드 링
+                  drawCircle(
+                    color = Color.Cyan.copy(alpha = 0.85f),
+                    radius = constrainedRadius,
+                    center = androidx.compose.ui.geometry.Offset(floorPt.x, floorPt.y),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(
+                      width = 3f * density,
+                      pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(15f, 10f), 0f)
+                    )
+                  )
+                  // 링 내부 글로우
+                  drawCircle(
+                    color = Color.Cyan.copy(alpha = 0.12f),
+                    radius = constrainedRadius,
+                    center = androidx.compose.ui.geometry.Offset(floorPt.x, floorPt.y)
+                  )
+                }
+              }
+
+              // R2. 3D 치수 말풍선 카드 그리기
+              if (topPt != null) {
+                val density = LocalContext.current.resources.displayMetrics.density
+                val leftDp = (topPt.x / density).dp
+                val topDp = (topPt.y / density).dp
+
+                Box(
+                  modifier = Modifier
+                    .offset(x = leftDp - 70.dp, y = topDp - 50.dp)
+                    .wrapContentSize()
+                ) {
+                  Card(
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(
+                      containerColor = if (isSelected) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 6.dp else 2.dp)
+                  ) {
+                    Column(
+                      modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                      horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                      Text(
+                        text = "${item.widthCm.toInt()}×${item.heightCm.toInt()}×${item.depthCm.toInt()}cm",
+                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                      if (isSelected) {
+                        Text(
+                          text = "선택됨",
+                          style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                          color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                        )
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
 
       val selectedItem = placedItems.find { it.id == selectedItemId }
@@ -848,33 +970,7 @@ fun ArScreenContent(
       }
 
       if (!isPlaneDetected) {
-        Box(
-          modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f)),
-          contentAlignment = Alignment.Center
-        ) {
-          Card(
-            modifier = Modifier.padding(32.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-          ) {
-            Column(
-              modifier = Modifier.padding(24.dp),
-              horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-              CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 16.dp))
-              Text("주변 평면 인식 중...", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-              Spacer(modifier = Modifier.height(8.dp))
-              Text(
-                "카메라를 천천히 좌우로 흔들면서 바닥면이나 평평한 표면을 비춰주세요.",
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
-            }
-          }
-        }
+        ScanGuideOverlay()
       }
     } else {
       Column(
@@ -889,3 +985,199 @@ fun ArScreenContent(
     }
   }
 }
+
+// =============================================================================
+// Premium UX Helpers & Animated Onboarding
+// =============================================================================
+
+@Composable
+fun ScanGuideOverlay() {
+  val transition = rememberInfiniteTransition(label = "ScanGuide")
+  val tiltAngle by transition.animateFloat(
+    initialValue = -20f,
+    targetValue = 20f,
+    animationSpec = infiniteRepeatable(
+      animation = tween(1600, easing = LinearEasing),
+      repeatMode = RepeatMode.Reverse
+    ),
+    label = "PhoneTilt"
+  )
+  val sweepOffset by transition.animateFloat(
+    initialValue = -50f,
+    targetValue = 50f,
+    animationSpec = infiniteRepeatable(
+      animation = tween(1600, easing = LinearEasing),
+      repeatMode = RepeatMode.Reverse
+    ),
+    label = "PhoneSweep"
+  )
+  val waveRadius by transition.animateFloat(
+    initialValue = 15f,
+    targetValue = 85f,
+    animationSpec = infiniteRepeatable(
+      animation = tween(2200, easing = FastOutSlowInEasing),
+      repeatMode = RepeatMode.Restart
+    ),
+    label = "RadarWave"
+  )
+
+  Box(
+    modifier = Modifier
+      .fillMaxSize()
+      .background(Color.Black.copy(alpha = 0.65f)),
+    contentAlignment = Alignment.Center
+  ) {
+    Card(
+      modifier = Modifier.padding(horizontal = 32.dp),
+      shape = RoundedCornerShape(16.dp),
+      colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+      elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+    ) {
+      Column(
+        modifier = Modifier.padding(28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+      ) {
+        Canvas(modifier = Modifier.size(150.dp)) {
+          val center = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
+          val baseLineY = center.y + 35f
+
+          // 1. Perspective Floor Grid
+          drawOval(
+            color = Color.Cyan.copy(alpha = 0.15f),
+            topLeft = androidx.compose.ui.geometry.Offset(center.x - 75f, baseLineY - 15f),
+            size = androidx.compose.ui.geometry.Size(150f, 30f),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
+          )
+
+          // 2. Pulse radar wave
+          drawOval(
+            color = Color.Cyan.copy(alpha = (1.0f - (waveRadius / 85f)).coerceIn(0f, 1f) * 0.45f),
+            topLeft = androidx.compose.ui.geometry.Offset(center.x - waveRadius, baseLineY - (waveRadius * 0.2f)),
+            size = androidx.compose.ui.geometry.Size(waveRadius * 2f, waveRadius * 0.4f),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f)
+          )
+
+          // 3. Device motion
+          drawContext.canvas.save()
+          drawContext.canvas.translate(center.x + sweepOffset, center.y - 20f)
+          drawContext.canvas.rotate(tiltAngle)
+
+          val phoneW = 40f
+          val phoneH = 76f
+          val rrect = androidx.compose.ui.geometry.RoundRect(
+            left = -phoneW / 2f,
+            top = -phoneH / 2f,
+            right = phoneW / 2f,
+            bottom = phoneH / 2f,
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(6f, 6f)
+          )
+          val path = androidx.compose.ui.graphics.Path().apply { addRoundRect(rrect) }
+
+          drawPath(path = path, color = Color.Gray, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4f))
+          drawPath(path = path, color = Color.DarkGray.copy(alpha = 0.7f))
+          drawCircle(color = Color.LightGray, radius = 3f, center = androidx.compose.ui.geometry.Offset(0f, -phoneH / 2f + 8f))
+          drawLine(color = Color.LightGray, start = androidx.compose.ui.geometry.Offset(-10f, phoneH / 2f - 6f), end = androidx.compose.ui.geometry.Offset(10f, phoneH / 2f - 6f), strokeWidth = 2f)
+
+          drawContext.canvas.restore()
+        }
+
+        Text("주변 공간 인식 중", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+          "스마트폰을 천천히 흔들며 바닥면과 주변 벽면을 비춰 공간을 스캔하세요.",
+          style = MaterialTheme.typography.bodyMedium,
+          textAlign = TextAlign.Center,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      }
+    }
+  }
+}
+
+fun projectWorldToScreen(
+  worldX: Float, worldY: Float, worldZ: Float,
+  viewMatrix: FloatArray,
+  projectionMatrix: FloatArray,
+  viewportWidth: Int,
+  viewportHeight: Int
+): android.graphics.PointF? {
+  val worldCoord = floatArrayOf(worldX, worldY, worldZ, 1.0f)
+  val cameraCoord = FloatArray(4)
+  val clipCoord = FloatArray(4)
+
+  android.opengl.Matrix.multiplyMV(cameraCoord, 0, viewMatrix, 0, worldCoord, 0)
+  android.opengl.Matrix.multiplyMV(clipCoord, 0, projectionMatrix, 0, cameraCoord, 0)
+
+  val w = clipCoord[3]
+  if (w < 0.001f) {
+    return null
+  }
+
+  val ndcX = clipCoord[0] / w
+  val ndcY = clipCoord[1] / w
+  val ndcZ = clipCoord[2] / w
+
+  if (ndcX < -1.3f || ndcX > 1.3f || ndcY < -1.3f || ndcY > 1.3f || ndcZ > 1.0f || ndcZ < -1.0f) {
+    return null
+  }
+
+  val screenX = ((ndcX + 1.0f) / 2.0f) * viewportWidth
+  val screenY = ((1.0f - ndcY) / 2.0f) * viewportHeight
+
+  return android.graphics.PointF(screenX, screenY)
+}
+
+fun findNearestVerticalPlaneSnap(
+  session: com.google.ar.core.Session?,
+  currentPose: Pose,
+  thresholdM: Float = 0.15f
+): Pose? {
+  if (session == null) return null
+  val verticalPlanes = session.getAllTrackables(Plane::class.java).filter {
+    it.type == Plane.Type.VERTICAL && it.trackingState == TrackingState.TRACKING
+  }
+  if (verticalPlanes.isEmpty()) return null
+
+  var bestPose: Pose? = null
+  var minDistance = Float.MAX_VALUE
+
+  for (plane in verticalPlanes) {
+    val planePose = plane.centerPose
+    val normal = FloatArray(3)
+    planePose.getTransformedAxis(2, 1f, normal, 0) // Local Z axis is plane normal
+
+    val dx = currentPose.tx() - planePose.tx()
+    val dy = currentPose.ty() - planePose.ty()
+    val dz = currentPose.tz() - planePose.tz()
+
+    val dist = Math.abs(dx * normal[0] + dy * normal[1] + dz * normal[2])
+
+    if (dist < thresholdM && dist < minDistance) {
+      minDistance = dist
+      val dot = dx * normal[0] + dy * normal[1] + dz * normal[2]
+      val sign = if (dot >= 0) 1.0f else -1.0f
+
+      val snapX = currentPose.tx() - normal[0] * dist * sign
+      val snapZ = currentPose.tz() - normal[2] * dist * sign
+
+      bestPose = Pose(
+        floatArrayOf(snapX, currentPose.ty(), snapZ),
+        planePose.rotationQuaternion
+      )
+    }
+  }
+  return bestPose
+}
+
+fun triggerHapticFeedback(context: android.content.Context) {
+  val vibrator = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+  vibrator?.let {
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+      it.vibrate(android.os.VibrationEffect.createOneShot(45, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+    } else {
+      @Suppress("DEPRECATION")
+      it.vibrate(45)
+    }
+  }
+}
+
