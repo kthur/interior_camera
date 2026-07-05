@@ -25,9 +25,7 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
 
   fun savePreset(preset: PresetItem) {
     viewModelScope.launch {
-      try {
-        dataRepository.savePreset(preset)
-      } catch (_: Exception) {}
+      dataRepository.savePreset(preset)
     }
   }
 
