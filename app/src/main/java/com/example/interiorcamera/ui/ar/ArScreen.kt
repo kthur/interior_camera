@@ -947,11 +947,33 @@ fun ArScreenContent(
       // 패널 표시 상태: null=닫힘, "ruler"/"calibration"/"recommend"=해당 패널 열림
       // ──────────────────────────────────────────────────────────────
       var activePanelKey by remember { mutableStateOf<String?>(null) }
+      var uiVisible by remember { mutableStateOf(true) }
 
       // 선택된 아이템이 있으면 다른 패널 닫기
       LaunchedEffect(selectedItemId) {
         if (selectedItemId != null) activePanelKey = null
       }
+
+      // ── UI 토글 버튼 ─────────────────────────────────────────────
+      IconButton(
+        onClick = { uiVisible = !uiVisible },
+        modifier = Modifier
+          .align(Alignment.TopEnd)
+          .padding(top = 48.dp, end = 12.dp)
+          .size(36.dp)
+          .background(
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+            shape = RoundedCornerShape(10.dp)
+          )
+      ) {
+        Text(
+          text = if (uiVisible) "✕" else "☰",
+          fontSize = 16.sp,
+          color = MaterialTheme.colorScheme.onSurface
+        )
+      }
+
+      if (uiVisible) {
 
       // ── 상단 미니멀 상태 바 ───────────────────────────────────────
       Row(
@@ -1354,6 +1376,7 @@ fun ArScreenContent(
             }
           }
         }
+      }
       }
 
       if (!isPlaneDetected) {
