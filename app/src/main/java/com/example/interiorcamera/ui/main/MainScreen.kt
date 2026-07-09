@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -101,11 +102,23 @@ fun MainScreenContent(
   }
 
   Column(modifier = modifier.fillMaxSize()) {
+    Spacer(modifier = Modifier.height(12.dp))
+    androidx.compose.foundation.Image(
+      painter = androidx.compose.ui.res.painterResource(id = com.example.interiorcamera.R.drawable.ic_app_logo),
+      contentDescription = "FitCheck AR Logo",
+      modifier = Modifier
+        .size(80.dp)
+        .align(Alignment.CenterHorizontally)
+        .clip(RoundedCornerShape(20.dp))
+    )
     Text(
       text = "FitCheck AR",
-      style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+      style = MaterialTheme.typography.headlineMedium.copy(
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.sp
+      ),
       color = MaterialTheme.colorScheme.primary,
-      modifier = Modifier.padding(vertical = 12.dp).align(Alignment.CenterHorizontally)
+      modifier = Modifier.padding(top = 8.dp, bottom = 12.dp).align(Alignment.CenterHorizontally)
     )
 
     TabRow(
