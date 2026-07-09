@@ -17,7 +17,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -973,14 +976,14 @@ fun ArScreenContent(
         )
       }
 
-      if (uiVisible) {
-
       // ── 상단 미니멀 상태 바 ───────────────────────────────────────
       Row(
         modifier = Modifier
           .align(Alignment.TopStart)
-          .padding(top = 48.dp, start = 12.dp, end = 12.dp)
-          .fillMaxWidth(),
+          .padding(top = 48.dp, start = 12.dp, end = 56.dp)
+          .fillMaxWidth()
+          .graphicsLayer { alpha = if (uiVisible) 1f else 0f }
+          .then(if (!uiVisible) Modifier.pointerInput(Unit) { detectTapGestures {} } else Modifier),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
       ) {
@@ -1067,7 +1070,9 @@ fun ArScreenContent(
         modifier = Modifier
           .align(Alignment.CenterEnd)
           .padding(end = 12.dp)
-          .padding(top = 100.dp),
+          .padding(top = 100.dp)
+          .graphicsLayer { alpha = if (uiVisible) 1f else 0f }
+          .then(if (!uiVisible) Modifier.pointerInput(Unit) { detectTapGestures {} } else Modifier),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
       ) {
@@ -1132,7 +1137,9 @@ fun ArScreenContent(
         modifier = Modifier
           .align(Alignment.BottomCenter)
           .fillMaxWidth()
-          .padding(bottom = 16.dp, start = 12.dp, end = 12.dp),
+          .padding(bottom = 16.dp, start = 12.dp, end = 12.dp)
+          .graphicsLayer { alpha = if (uiVisible) 1f else 0f }
+          .then(if (!uiVisible) Modifier.pointerInput(Unit) { detectTapGestures {} } else Modifier),
         verticalArrangement = Arrangement.spacedBy(8.dp)
       ) {
 
@@ -1376,7 +1383,6 @@ fun ArScreenContent(
             }
           }
         }
-      }
       }
 
       if (!isPlaneDetected) {
