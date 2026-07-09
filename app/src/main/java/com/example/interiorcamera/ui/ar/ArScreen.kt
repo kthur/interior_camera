@@ -59,6 +59,8 @@ import io.github.sceneview.rememberModelInstance
 import io.github.sceneview.rememberModelLoader
 import com.example.interiorcamera.ArItem
 import com.example.interiorcamera.data.RecommendedFurniture
+import com.example.interiorcamera.data.DefaultFurnitureRepository
+import com.example.interiorcamera.ui.ar.OnboardingTutorial
 import kotlin.math.atan2
 import kotlin.math.sqrt
 
@@ -141,13 +143,7 @@ fun ArScreen(
   }
 
   val catalog = remember {
-    listOf(
-      RecommendedFurniture("Cozy Sofa", 160f, 85f, 90f, "cube.glb"),
-      RecommendedFurniture("Wooden Dining Table", 140f, 75f, 80f, "cube.glb"),
-      RecommendedFurniture("Modern Desk", 120f, 75f, 60f, "cube.glb"),
-      RecommendedFurniture("Kitchen Cabinet", 80f, 180f, 50f, "refrigerator.glb"),
-      RecommendedFurniture("Single Bed", 100f, 45f, 200f, "cube.glb")
-    )
+    DefaultFurnitureRepository().getRecommendedFurniture()
   }
 
   val measuredDistance = remember(rulerPointA, rulerPointB, currentCalibrationFactor) {
@@ -781,6 +777,7 @@ fun ArScreenContent(
 ) {
   var viewportWidth by remember { mutableStateOf(0) }
   var viewportHeight by remember { mutableStateOf(0) }
+  var showOnboarding by remember { mutableStateOf(true) }
 
   Box(
     modifier = modifier
@@ -1364,12 +1361,17 @@ fun ArScreenContent(
                       onSelectRecommended(furniture)
                       activePanelKey = null
                     },
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                   ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                      Text(furniture.name, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                       Text(
-                        text = "${furniture.widthCm.toInt()}×${furniture.depthCm.toInt()}cm",
+                        text = "[${furniture.brand}] ${furniture.name}",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                        maxLines = 1
+                      )
+                      Spacer(modifier = Modifier.height(2.dp))
+                      Text(
+                        text = "${furniture.widthCm.toInt()}×${furniture.depthCm.toInt()}cm  •  ${furniture.price}",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                         color = LocalContentColor.current.copy(alpha = 0.7f)
                       )
@@ -1387,6 +1389,10 @@ fun ArScreenContent(
 
       if (!isPlaneDetected) {
         ScanGuideOverlay()
+      }
+
+      if (showOnboarding) {
+        OnboardingTutorial(onDismiss = { showOnboarding = false })
       }
     } else {
       Column(

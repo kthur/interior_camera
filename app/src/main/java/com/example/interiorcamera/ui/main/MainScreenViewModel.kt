@@ -8,24 +8,39 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.interiorcamera.data.DataRepository
 import com.example.interiorcamera.data.DefaultDataRepository
 import com.example.interiorcamera.data.PresetItem
-import com.example.interiorcamera.ui.main.MainScreenUiState.Success
+import com.example.interiorcamera.data.RoomPreset
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class MainScreenViewModel(private val dataRepository: DataRepository) : ViewModel() {
+
   val uiState: StateFlow<MainScreenUiState> =
-    dataRepository.data
-      .map<List<PresetItem>, MainScreenUiState> { Success(it) }
-      .catch { emit(MainScreenUiState.Error(it)) }
-      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MainScreenUiState.Loading)
+    combine(dataRepository.data, dataRepository.roomPresets) { presets, roomPresets ->
+      MainScreenUiState.Success(presets = presets, roomPresets = roomPresets) as MainScreenUiState
+    }.stateIn(
+      scope = viewModelScope,
+      started = SharingStarted.WhileSubscribed(5000),
+      initialValue = MainScreenUiState.Loading
+    )
 
   fun savePreset(preset: PresetItem) {
     viewModelScope.launch {
       dataRepository.savePreset(preset)
+    }
+  }
+
+  fun saveRoomPreset(roomPreset: RoomPreset) {
+    viewModelScope.launch {
+      dataRepository.saveRoomPreset(roomPreset)
+    }
+  }
+
+  fun deleteRoomPreset(presetId: String) {
+    viewModelScope.launch {
+      dataRepository.deleteRoomPreset(presetId)
     }
   }
 
@@ -43,9 +58,11 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
 
 sealed interface MainScreenUiState {
   object Loading : MainScreenUiState
-
   data class Error(val throwable: Throwable) : MainScreenUiState
-
-  data class Success(val presets: List<PresetItem>) : MainScreenUiState
+  data class Success(
+    val presets: List<PresetItem>,
+    val roomPresets: List<RoomPreset> = emptyList()
+  ) : MainScreenUiState
 }
+
 
