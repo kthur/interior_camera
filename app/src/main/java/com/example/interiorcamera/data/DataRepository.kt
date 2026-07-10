@@ -44,7 +44,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
           val height = obj.getDouble("height").toFloat()
           val depth = obj.getDouble("depth").toFloat()
           val modelName = obj.optString("modelName", "cube.glb")
-          list.add(PresetItem(id, name, width, height, depth, modelName))
+          list.add(PresetItem(name = name, width = width, height = height, depth = depth, modelName = modelName, id = id))
         }
         _data.value = list
       } catch (e: Exception) {
