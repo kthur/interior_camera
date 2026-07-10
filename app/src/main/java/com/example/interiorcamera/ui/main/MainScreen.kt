@@ -7,6 +7,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -23,8 +26,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -35,6 +39,8 @@ import com.example.interiorcamera.data.PresetItem
 import com.example.interiorcamera.data.RoomPreset
 import com.example.interiorcamera.theme.InteriorCameraTheme
 import com.example.interiorcamera.ui.gallery.GalleryScreen
+import com.example.interiorcamera.ui.floorplan.FloorplanCanvas
+import com.example.interiorcamera.ui.floorplan.ArPlacedItem
 import com.google.ar.core.ArCoreApk
 import java.util.UUID
 
@@ -87,6 +93,8 @@ fun MainScreenContent(
   var roomWidthStr by remember { mutableStateOf("300") }
   var roomDepthStr by remember { mutableStateOf("350") }
 
+  var activeFloorplanRoom by remember { mutableStateOf<RoomPreset?>(null) }
+
   val permissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestPermission()
   ) { isGranted ->
@@ -103,7 +111,7 @@ fun MainScreenContent(
 
   Column(modifier = modifier.fillMaxSize()) {
     Spacer(modifier = Modifier.height(12.dp))
-    androidx.compose.foundation.Image(
+    Image(
       painter = androidx.compose.ui.res.painterResource(id = com.example.interiorcamera.R.drawable.ic_app_logo),
       contentDescription = "FitCheck AR Logo",
       modifier = Modifier
@@ -537,9 +545,24 @@ fun MainScreenContent(
                           style = MaterialTheme.typography.bodyMedium,
                           color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                          text = "가구: ${room.items.size}개 배치됨",
+                          style = MaterialTheme.typography.labelSmall,
+                          color = MaterialTheme.colorScheme.primary
+                        )
                       }
 
-                      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                      Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        // 2D 도면 배치 에디터 실행 버튼
+                        OutlinedButton(
+                          onClick = { activeFloorplanRoom = room },
+                          contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                          shape = RoundedCornerShape(8.dp)
+                        ) {
+                          Text("📐 도면", fontSize = 11.sp)
+                        }
+
                         IconButton(
                           onClick = {
                             val availability = ArCoreApk.getInstance().checkAvailability(context)
@@ -549,18 +572,30 @@ fun MainScreenContent(
                             }
                             val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
                             if (hasPermission) {
-                              val arItems = PRESETS.map { ArItem(it.name, it.width, it.height, it.depth, it.modelName) }
+                              val arItems = room.items.map {
+                                ArItem(
+                                  name = it.name,
+                                  widthCm = it.widthCm,
+                                  heightCm = it.heightCm,
+                                  depthCm = it.depthCm,
+                                  modelName = it.modelName,
+                                  isFloorplanPlaced = true,
+                                  offsetX = it.offsetX,
+                                  offsetZ = it.offsetZ,
+                                  rotationDegrees = it.rotationDegrees
+                                )
+                              }
                               onItemClick(ArView(room.widthCm, 100f, room.depthCm, "cube.glb", 1.0f, arItems))
                             } else {
                               permissionLauncher.launch(Manifest.permission.CAMERA)
                             }
                           }
                         ) {
-                          Text("📷", fontSize = 20.sp)
+                          Text("📷", fontSize = 18.sp)
                         }
 
                         IconButton(onClick = { onDeleteRoomPreset(room.id) }) {
-                          Text("🗑", fontSize = 20.sp, color = MaterialTheme.colorScheme.error)
+                          Text("🗑", fontSize = 18.sp, color = MaterialTheme.colorScheme.error)
                         }
                       }
                     }
@@ -574,6 +609,200 @@ fun MainScreenContent(
       }
       2 -> {
         GalleryScreen(modifier = Modifier.fillMaxSize())
+      }
+    }
+
+    // 2D Floorplan Layout Editor Dialog
+    activeFloorplanRoom?.let { room ->
+      FloorplanEditorDialog(
+        room = room,
+        onDismiss = { activeFloorplanRoom = null },
+        onSave = { updatedItems ->
+          onSaveRoomPreset(room.copy(items = updatedItems))
+          activeFloorplanRoom = null
+        },
+        onLaunchAr = { updatedItems ->
+          val arItems = updatedItems.map {
+            ArItem(
+              name = it.name,
+              widthCm = it.widthCm,
+              heightCm = it.heightCm,
+              depthCm = it.depthCm,
+              modelName = it.modelName,
+              isFloorplanPlaced = true,
+              offsetX = it.offsetX,
+              offsetZ = it.offsetZ,
+              rotationDegrees = it.rotationDegrees
+            )
+          }
+          val availability = ArCoreApk.getInstance().checkAvailability(context)
+          if (availability == ArCoreApk.Availability.UNSUPPORTED_DEVICE_NOT_CAPABLE) {
+            Toast.makeText(context, "이 기기는 ARCore를 지원하지 않아 AR 기능을 실행할 수 없습니다.", Toast.LENGTH_LONG).show()
+            return@FloorplanEditorDialog
+          }
+          val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+          if (hasPermission) {
+            onItemClick(ArView(room.widthCm, 100f, room.depthCm, "cube.glb", 1.0f, arItems))
+          } else {
+            Toast.makeText(context, "AR 피팅을 하려면 카메라 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+          }
+        }
+      )
+    }
+  }
+}
+
+@Composable
+fun FloorplanEditorDialog(
+  room: RoomPreset,
+  onDismiss: () -> Unit,
+  onSave: (List<ArPlacedItem>) -> Unit,
+  onLaunchAr: (List<ArPlacedItem>) -> Unit
+) {
+  var placedItems by remember { mutableStateOf(room.items) }
+  var selectedItemName by remember { mutableStateOf<String?>(null) }
+  val context = LocalContext.current
+
+  Dialog(
+    onDismissRequest = onDismiss,
+    properties = DialogProperties(usePlatformDefaultWidth = false)
+  ) {
+    Surface(
+      modifier = Modifier.fillMaxSize(),
+      color = MaterialTheme.colorScheme.background
+    ) {
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+      ) {
+        // Top Action Bar
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          TextButton(onClick = onDismiss) {
+            Text("닫기", style = MaterialTheme.typography.titleMedium)
+          }
+          Text(
+            text = "${room.name} 2D 도면 배치",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+          )
+          Button(
+            onClick = { onSave(placedItems) },
+            shape = RoundedCornerShape(8.dp)
+          ) {
+            Text("도면 저장")
+          }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Grid canvas (Room layout width/depth proportions)
+        FloorplanCanvas(
+          roomWidthCm = room.widthCm,
+          roomDepthCm = room.depthCm,
+          placedItems = placedItems,
+          onPlacedItemsChanged = { placedItems = it },
+          selectedItemName = selectedItemName,
+          onSelectItem = { selectedItemName = it },
+          modifier = Modifier.weight(1f)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Selected Item Action Tools (Rotate, Delete)
+        selectedItemName?.let { selName ->
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            OutlinedButton(onClick = {
+              placedItems = placedItems.map {
+                if (it.name == selName) it.copy(rotationDegrees = (it.rotationDegrees - 15f) % 360f) else it
+              }
+            }) {
+              Text("🔄 좌회전(-15°)", fontSize = 12.sp)
+            }
+
+            OutlinedButton(onClick = {
+              placedItems = placedItems.map {
+                if (it.name == selName) it.copy(rotationDegrees = (it.rotationDegrees + 15f) % 360f) else it
+              }
+            }) {
+              Text("🔄 우회전(+15°)", fontSize = 12.sp)
+            }
+
+            Button(
+              onClick = {
+                placedItems = placedItems.filter { it.name != selName }
+                selectedItemName = null
+              },
+              colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+              Text("🗑 삭제", fontSize = 12.sp)
+            }
+          }
+          Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Add furniture panel
+        Text(
+          text = "🛋 배치할 가구/가전 추가",
+          style = MaterialTheme.typography.titleSmall,
+          modifier = Modifier.align(Alignment.Start)
+        )
+        
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(vertical = 8.dp),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          val availableFurniture = listOf(
+            ArPlacedItem("양문형 냉장고", 91.2f, 178.4f, 75.0f, "refrigerator.glb", 0f, 0f, 0f),
+            ArPlacedItem("드럼 세탁기", 60.0f, 85.0f, 65.0f, "cube.glb", 0f, 0f, 0f),
+            ArPlacedItem("소파 (IKEA)", 160f, 85f, 90f, "cube.glb", 0f, 0f, 0f),
+            ArPlacedItem("식탁 (한샘)", 140f, 75f, 80f, "cube.glb", 0f, 0f, 0f),
+            ArPlacedItem("싱글 침대", 100f, 45f, 200f, "cube.glb", 0f, 0f, 0f)
+          )
+
+          availableFurniture.forEach { item ->
+            ElevatedCard(
+              onClick = {
+                val count = placedItems.count { it.name.startsWith(item.name) }
+                val uniqueName = if (count > 0) "${item.name} (${count + 1})" else item.name
+                placedItems = placedItems + item.copy(name = uniqueName)
+              },
+              modifier = Modifier.width(120.dp)
+            ) {
+              Column(
+                modifier = Modifier.padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+              ) {
+                Text(item.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text("${item.widthCm.toInt()}x${item.depthCm.toInt()}cm", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              }
+            }
+          }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Launch AR fitting button
+        Button(
+          onClick = { onLaunchAr(placedItems) },
+          modifier = Modifier.fillMaxWidth().height(52.dp),
+          shape = RoundedCornerShape(12.dp),
+          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+        ) {
+          Text("📷 이 도면 레이아웃대로 AR 피팅", style = MaterialTheme.typography.titleMedium, color = Color.White)
+        }
       }
     }
   }

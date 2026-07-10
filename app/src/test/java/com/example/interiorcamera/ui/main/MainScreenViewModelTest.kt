@@ -2,6 +2,7 @@ package com.example.interiorcamera.ui.main
 
 import com.example.interiorcamera.data.DataRepository
 import com.example.interiorcamera.data.PresetItem
+import com.example.interiorcamera.data.RoomPreset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import kotlinx.coroutines.flow.Flow
@@ -56,7 +57,12 @@ class MainScreenViewModelTest {
       override val data: Flow<List<PresetItem>> = kotlinx.coroutines.flow.flow {
         throw RuntimeException("Load failed")
       }
+      override val roomPresets: Flow<List<RoomPreset>> = kotlinx.coroutines.flow.flow {
+        throw RuntimeException("Load failed")
+      }
       override suspend fun savePreset(preset: PresetItem) {}
+      override suspend fun saveRoomPreset(preset: RoomPreset) {}
+      override suspend fun deleteRoomPreset(presetId: String) {}
     }
     val viewModel = MainScreenViewModel(errorRepository)
     val state = viewModel.uiState.first { it is MainScreenUiState.Error } as MainScreenUiState.Error
@@ -116,11 +122,22 @@ private class FakeMyModelRepository : DataRepository {
   private val _data = MutableStateFlow<List<PresetItem>>(emptyList())
   override val data: Flow<List<PresetItem>> = _data.asStateFlow()
 
+  private val _roomPresets = MutableStateFlow<List<RoomPreset>>(emptyList())
+  override val roomPresets: Flow<List<RoomPreset>> = _roomPresets.asStateFlow()
+
   override suspend fun savePreset(preset: PresetItem) {
     if (preset.name.isEmpty() || preset.width <= 0f) {
       throw IllegalArgumentException("Invalid preset")
     }
     _data.value = _data.value + preset
+  }
+
+  override suspend fun saveRoomPreset(preset: RoomPreset) {
+    _roomPresets.value = _roomPresets.value.filter { it.id != preset.id } + preset
+  }
+
+  override suspend fun deleteRoomPreset(presetId: String) {
+    _roomPresets.value = _roomPresets.value.filter { it.id != presetId }
   }
 }
 

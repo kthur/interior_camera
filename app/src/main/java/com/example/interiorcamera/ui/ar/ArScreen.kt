@@ -63,6 +63,8 @@ import com.example.interiorcamera.data.DefaultFurnitureRepository
 import com.example.interiorcamera.ui.ar.OnboardingTutorial
 import kotlin.math.atan2
 import kotlin.math.sqrt
+import kotlin.math.sin
+import kotlin.math.cos
 
 private const val MAX_HIT_DISTANCE_M = 5.0f
 private const val NUDGE_STEP_M = 0.05f
@@ -349,6 +351,40 @@ fun ArScreen(
           triggerHapticFeedback(context) // Haptic feedback on snap
         }
 
+        // Real-time collision detection (SAT) and resolution (MTV)
+        val activeObb = Obb2D(
+          x = targetPose.tx(),
+          z = targetPose.tz(),
+          hw = (item.widthCm / 100f * calibrationFactor) / 2f,
+          hd = (item.depthCm / 100f * calibrationFactor) / 2f,
+          rotationDegrees = item.rotationDegrees
+        )
+
+        var collidingResult: CollisionResult? = null
+        for (other in placedItems) {
+          if (other.id == item.id) continue
+          val otherObb = Obb2D(
+            x = other.anchor.pose.tx(),
+            z = other.anchor.pose.tz(),
+            hw = (other.widthCm / 100f * calibrationFactor) / 2f,
+            hd = (other.depthCm / 100f * calibrationFactor) / 2f,
+            rotationDegrees = other.rotationDegrees
+          )
+          val res = CollisionDetection.checkCollision(activeObb, otherObb)
+          if (res.collides) {
+            collidingResult = res
+            break
+          }
+        }
+
+        if (collidingResult != null && collidingResult.collides) {
+          triggerHapticFeedback(context)
+          targetPose = Pose(
+            floatArrayOf(targetPose.tx() + collidingResult.mtvX, targetPose.ty(), targetPose.tz() + collidingResult.mtvZ),
+            targetPose.rotationQuaternion
+          )
+        }
+
         val newAnchor = arSession?.createAnchor(targetPose)
         if (newAnchor != null) {
           placedItems = placedItems.map {
@@ -488,7 +524,10 @@ fun ArScreen(
             arSession = session
             if (!depthConfigured) {
               try {
-                session.configure(session.config.apply { depthMode = Config.DepthMode.AUTOMATIC })
+                session.configure(session.config.apply {
+                  depthMode = Config.DepthMode.AUTOMATIC
+                  lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
+                })
               } catch (_: Exception) { }
               depthConfigured = true
             }
@@ -496,8 +535,50 @@ fun ArScreen(
             trackingState = updatedFrame.camera.trackingState
             if (!isPlaneDetected) {
               val planes = session.getAllTrackables(Plane::class.java)
-              if (planes.isNotEmpty()) {
+              val horizontalPlane = planes.find { it.type == Plane.Type.HORIZONTAL_UPWARD_FACING || it.type == Plane.Type.HORIZONTAL_DOWNWARD_FACING } ?: planes.firstOrNull()
+              if (horizontalPlane != null) {
                 isPlaneDetected = true
+                val floorplanItems = availableModels.filter { it.isFloorplanPlaced }
+                if (floorplanItems.isNotEmpty()) {
+                  val centerPose = horizontalPlane.centerPose
+                  val spawnedList = mutableListOf<PlacedItem>()
+                  for (arItem in floorplanItems) {
+                    val relativeX = arItem.offsetX
+                    val relativeZ = arItem.offsetZ
+                    val yawRad = Math.toRadians(arItem.rotationDegrees.toDouble())
+                    val qRot = floatArrayOf(
+                      0f,
+                      sin(yawRad / 2.0).toFloat(),
+                      0f,
+                      cos(yawRad / 2.0).toFloat()
+                    )
+                    val targetPose = Pose(
+                      floatArrayOf(
+                        centerPose.tx() + relativeX,
+                        centerPose.ty(),
+                        centerPose.tz() + relativeZ
+                      ),
+                      multiplyQuaternions(centerPose.rotationQuaternion, qRot)
+                    )
+                    val newAnchor = session.createAnchor(targetPose)
+                    if (newAnchor != null) {
+                      spawnedList.add(
+                        PlacedItem(
+                          id = java.util.UUID.randomUUID().toString(),
+                          anchor = newAnchor,
+                          widthCm = arItem.widthCm,
+                          heightCm = arItem.heightCm,
+                          depthCm = arItem.depthCm,
+                          modelName = arItem.modelName,
+                          rotationDegrees = arItem.rotationDegrees
+                        )
+                      )
+                    }
+                  }
+                  if (spawnedList.isNotEmpty()) {
+                    placedItems = placedItems + spawnedList
+                  }
+                }
               }
             }
             hasVerticalPlane = session.getAllTrackables(Plane::class.java).any { it.type == Plane.Type.VERTICAL }
@@ -625,10 +706,16 @@ fun ArScreen(
                     modelInstance = modelInstance,
                     scale = effectiveScale,
                     rotation = Rotation(0f, item.rotationDegrees, 0f),
-                    position = Position(0f, h / 2f, 0f)
+                    position = Position(0f, h / 2f, 0f),
+                    apply = {
+                      isShadowCaster = true
+                      isShadowReceiver = true
+                    }
                   )
                 }
 
+                // Legacy flat shadow mesh disabled/removed for premium soft shadows
+                /*
                 val shadowInstance = rememberModelInstance(modelLoader, "models/cube.glb")
                 LaunchedEffect(shadowInstance) {
                   shadowInstance?.let { mi ->
@@ -647,6 +734,7 @@ fun ArScreen(
                     position = Position(0f, 0.005f, 0f)
                   )
                 }
+                */
               }
             }
           }
@@ -824,14 +912,39 @@ fun ArScreenContent(
               // R1. 선택된 가구 바닥 선택 링 (Cyan glowing halo)
               val isSelected = item.id == selectedItemId
               if (floorPt != null && isSelected) {
+                // Check if selected item is currently colliding with any other item
+                var hasCollision = false
+                val activeObb = Obb2D(
+                  x = pose.tx(),
+                  z = pose.tz(),
+                  hw = (item.widthCm / 100f * calibrationFactor) / 2f,
+                  hd = (item.depthCm / 100f * calibrationFactor) / 2f,
+                  rotationDegrees = item.rotationDegrees
+                )
+                for (other in placedItems) {
+                  if (other.id == item.id) continue
+                  val otherObb = Obb2D(
+                    x = other.anchor.pose.tx(),
+                    z = other.anchor.pose.tz(),
+                    hw = (other.widthCm / 100f * calibrationFactor) / 2f,
+                    hd = (other.depthCm / 100f * calibrationFactor) / 2f,
+                    rotationDegrees = other.rotationDegrees
+                  )
+                  if (CollisionDetection.checkCollision(activeObb, otherObb).collides) {
+                    hasCollision = true
+                    break
+                  }
+                }
+                val ringColor = if (hasCollision) Color.Red else Color.Cyan
+
                 val density = LocalContext.current.resources.displayMetrics.density
                 Canvas(modifier = Modifier.fillMaxSize()) {
                   val ringRadius = (item.widthCm.coerceAtLeast(item.depthCm) / 2f) * 4f * density
                   val constrainedRadius = ringRadius.coerceIn(50f, 150f)
 
-                  // 대시 효과가 가미된 세련된 청록 가이드 링
+                  // 대시 효과가 가미된 세련된 가이드 링 (충돌 시 빨간색, 평상시 청록색)
                   drawCircle(
-                    color = Color.Cyan.copy(alpha = 0.85f),
+                    color = ringColor.copy(alpha = 0.85f),
                     radius = constrainedRadius,
                     center = androidx.compose.ui.geometry.Offset(floorPt.x, floorPt.y),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(
@@ -841,7 +954,7 @@ fun ArScreenContent(
                   )
                   // 링 내부 글로우
                   drawCircle(
-                    color = Color.Cyan.copy(alpha = 0.12f),
+                    color = ringColor.copy(alpha = 0.12f),
                     radius = constrainedRadius,
                     center = androidx.compose.ui.geometry.Offset(floorPt.x, floorPt.y)
                   )
@@ -1653,5 +1766,16 @@ fun triggerHapticFeedback(context: android.content.Context) {
       it.vibrate(45)
     }
   }
+}
+
+private fun multiplyQuaternions(q1: FloatArray, q2: FloatArray): FloatArray {
+  val x1 = q1[0]; val y1 = q1[1]; val z1 = q1[2]; val w1 = q1[3]
+  val x2 = q2[0]; val y2 = q2[1]; val z2 = q2[2]; val w2 = q2[3]
+  return floatArrayOf(
+    x1 * w2 + y1 * z2 - z1 * y2 + w1 * x2,
+    -x1 * z2 + y1 * w2 + z1 * x2 + w1 * y2,
+    x1 * y2 - y1 * x2 + z1 * w2 + w1 * z2,
+    -x1 * x2 - y1 * y2 - z1 * z2 + w1 * w2
+  )
 }
 

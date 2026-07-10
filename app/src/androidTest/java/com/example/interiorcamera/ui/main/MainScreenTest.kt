@@ -21,7 +21,9 @@ class MainScreenTest {
       MainScreenContent(
         uiState = MainScreenUiState.Success(emptyList()),
         onItemClick = {},
-        onSavePreset = {}
+        onSavePreset = {},
+        onSaveRoomPreset = {},
+        onDeleteRoomPreset = {}
       )
     }
 
@@ -40,7 +42,9 @@ class MainScreenTest {
       MainScreenContent(
         uiState = MainScreenUiState.Success(customPresets),
         onItemClick = {},
-        onSavePreset = {}
+        onSavePreset = {},
+        onSaveRoomPreset = {},
+        onDeleteRoomPreset = {}
       )
     }
 
@@ -57,7 +61,9 @@ class MainScreenTest {
       MainScreenContent(
         uiState = MainScreenUiState.Success(emptyList()),
         onItemClick = {},
-        onSavePreset = { savedPreset = it }
+        onSavePreset = { savedPreset = it },
+        onSaveRoomPreset = {},
+        onDeleteRoomPreset = {}
       )
     }
 
@@ -75,7 +81,9 @@ class MainScreenTest {
       MainScreenContent(
         uiState = MainScreenUiState.Success(emptyList()),
         onItemClick = {},
-        onSavePreset = {}
+        onSavePreset = {},
+        onSaveRoomPreset = {},
+        onDeleteRoomPreset = {}
       )
     }
 
@@ -88,7 +96,9 @@ class MainScreenTest {
       MainScreenContent(
         uiState = MainScreenUiState.Success(emptyList()),
         onItemClick = {},
-        onSavePreset = {}
+        onSavePreset = {},
+        onSaveRoomPreset = {},
+        onDeleteRoomPreset = {}
       )
     }
 
@@ -104,7 +114,9 @@ class MainScreenTest {
       MainScreenContent(
         uiState = MainScreenUiState.Success(emptyList()),
         onItemClick = {},
-        onSavePreset = {}
+        onSavePreset = {},
+        onSaveRoomPreset = {},
+        onDeleteRoomPreset = {}
       )
     }
 
@@ -121,7 +133,9 @@ class MainScreenTest {
       MainScreenContent(
         uiState = MainScreenUiState.Success(emptyList()),
         onItemClick = {},
-        onSavePreset = {}
+        onSavePreset = {},
+        onSaveRoomPreset = {},
+        onDeleteRoomPreset = {}
       )
     }
 
@@ -137,7 +151,9 @@ class MainScreenTest {
       MainScreenContent(
         uiState = MainScreenUiState.Success(emptyList()),
         onItemClick = {},
-        onSavePreset = { savedPreset = it }
+        onSavePreset = { savedPreset = it },
+        onSaveRoomPreset = {},
+        onDeleteRoomPreset = {}
       )
     }
 
@@ -160,7 +176,9 @@ class MainScreenTest {
       MainScreenContent(
         uiState = MainScreenUiState.Success(emptyList()),
         onItemClick = {},
-        onSavePreset = {}
+        onSavePreset = {},
+        onSaveRoomPreset = {},
+        onDeleteRoomPreset = {}
       )
     }
 
@@ -178,7 +196,9 @@ class MainScreenTest {
       MainScreenContent(
         uiState = MainScreenUiState.Success(emptyList()),
         onItemClick = {},
-        onSavePreset = {}
+        onSavePreset = {},
+        onSaveRoomPreset = {},
+        onDeleteRoomPreset = {}
       )
     }
 
@@ -196,7 +216,9 @@ class MainScreenTest {
       MainScreenContent(
         uiState = MainScreenUiState.Success(customPresets),
         onItemClick = {},
-        onSavePreset = {}
+        onSavePreset = {},
+        onSaveRoomPreset = {},
+        onDeleteRoomPreset = {}
       )
     }
 
@@ -211,7 +233,9 @@ class MainScreenTest {
       MainScreenContent(
         uiState = MainScreenUiState.Success(emptyList()),
         onItemClick = {},
-        onSavePreset = {}
+        onSavePreset = {},
+        onSaveRoomPreset = {},
+        onDeleteRoomPreset = {}
       )
     }
 

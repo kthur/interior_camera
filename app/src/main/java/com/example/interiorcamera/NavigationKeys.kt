@@ -11,7 +11,11 @@ data class ArItem(
   val widthCm: Float,
   val heightCm: Float,
   val depthCm: Float,
-  val modelName: String
+  val modelName: String,
+  val isFloorplanPlaced: Boolean = false,
+  val offsetX: Float = 0f,
+  val offsetZ: Float = 0f,
+  val rotationDegrees: Float = 0f
 )
 
 @Serializable

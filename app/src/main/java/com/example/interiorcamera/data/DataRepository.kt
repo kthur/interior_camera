@@ -1,6 +1,7 @@
 package com.example.interiorcamera.data
 
 import android.content.Context
+import com.example.interiorcamera.ui.floorplan.ArPlacedItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -84,7 +85,27 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
           val width = obj.getDouble("width").toFloat()
           val depth = obj.getDouble("depth").toFloat()
           val timestamp = obj.getLong("timestamp")
-          list.add(RoomPreset(id, name, width, depth, timestamp))
+          
+          val itemsList = mutableListOf<ArPlacedItem>()
+          val itemsArray = obj.optJSONArray("items")
+          if (itemsArray != null) {
+            for (j in 0 until itemsArray.length()) {
+              val itemObj = itemsArray.getJSONObject(j)
+              itemsList.add(
+                ArPlacedItem(
+                  name = itemObj.getString("name"),
+                  widthCm = itemObj.getDouble("widthCm").toFloat(),
+                  heightCm = itemObj.getDouble("heightCm").toFloat(),
+                  depthCm = itemObj.getDouble("depthCm").toFloat(),
+                  modelName = itemObj.getString("modelName"),
+                  offsetX = itemObj.getDouble("offsetX").toFloat(),
+                  offsetZ = itemObj.getDouble("offsetZ").toFloat(),
+                  rotationDegrees = itemObj.getDouble("rotationDegrees").toFloat()
+                )
+              )
+            }
+          }
+          list.add(RoomPreset(id, name, width, depth, timestamp, itemsList))
         }
         _roomPresets.value = list
       } catch (e: Exception) {
@@ -119,6 +140,21 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
       obj.put("width", item.widthCm.toDouble())
       obj.put("depth", item.depthCm.toDouble())
       obj.put("timestamp", item.timestamp)
+      
+      val itemsArray = JSONArray()
+      for (arItem in item.items) {
+        val itemObj = JSONObject()
+        itemObj.put("name", arItem.name)
+        itemObj.put("widthCm", arItem.widthCm.toDouble())
+        itemObj.put("heightCm", arItem.heightCm.toDouble())
+        itemObj.put("depthCm", arItem.depthCm.toDouble())
+        itemObj.put("modelName", arItem.modelName)
+        itemObj.put("offsetX", arItem.offsetX.toDouble())
+        itemObj.put("offsetZ", arItem.offsetZ.toDouble())
+        itemObj.put("rotationDegrees", arItem.rotationDegrees.toDouble())
+        itemsArray.put(itemObj)
+      }
+      obj.put("items", itemsArray)
       jsonArray.put(obj)
     }
 

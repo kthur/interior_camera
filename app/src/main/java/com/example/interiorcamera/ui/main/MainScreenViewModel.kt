@@ -11,6 +11,7 @@ import com.example.interiorcamera.data.PresetItem
 import com.example.interiorcamera.data.RoomPreset
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -20,7 +21,8 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
   val uiState: StateFlow<MainScreenUiState> =
     combine(dataRepository.data, dataRepository.roomPresets) { presets, roomPresets ->
       MainScreenUiState.Success(presets = presets, roomPresets = roomPresets) as MainScreenUiState
-    }.stateIn(
+    }.catch { emit(MainScreenUiState.Error(it)) }
+    .stateIn(
       scope = viewModelScope,
       started = SharingStarted.WhileSubscribed(5000),
       initialValue = MainScreenUiState.Loading
@@ -28,19 +30,25 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
 
   fun savePreset(preset: PresetItem) {
     viewModelScope.launch {
-      dataRepository.savePreset(preset)
+      try {
+        dataRepository.savePreset(preset)
+      } catch (_: Exception) {}
     }
   }
 
   fun saveRoomPreset(roomPreset: RoomPreset) {
     viewModelScope.launch {
-      dataRepository.saveRoomPreset(roomPreset)
+      try {
+        dataRepository.saveRoomPreset(roomPreset)
+      } catch (_: Exception) {}
     }
   }
 
   fun deleteRoomPreset(presetId: String) {
     viewModelScope.launch {
-      dataRepository.deleteRoomPreset(presetId)
+      try {
+        dataRepository.deleteRoomPreset(presetId)
+      } catch (_: Exception) {}
     }
   }
 
