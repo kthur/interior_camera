@@ -30,6 +30,7 @@ object FloorplanCoordinator {
         roomWidthCm: Float,
         roomDepthCm: Float
     ): Pair<Float, Float> {
+        if (canvasWidth <= 0f || canvasHeight <= 0f) return Pair(0f, 0f)
         val dxPx = screenX - (canvasWidth / 2f)
         val dyPx = screenY - (canvasHeight / 2f)
 
@@ -75,8 +76,8 @@ object FloorplanCoordinator {
         roomWidthCm: Float,
         roomDepthCm: Float
     ): Pair<Float, Float> {
-        val rw = (roomWidthCm / 100f) / 2f
-        val rd = (roomDepthCm / 100f) / 2f
+        val rw = abs(roomWidthCm / 100f) / 2f
+        val rd = abs(roomDepthCm / 100f) / 2f
 
         val angleRad = Math.toRadians(rotationDegrees.toDouble()).toFloat()
         val c = cos(angleRad)
@@ -92,8 +93,14 @@ object FloorplanCoordinator {
         val aabbHalfW = abs(ax.x * hw) + abs(az.x * hd)
         val aabbHalfD = abs(ax.y * hw) + abs(az.y * hd)
 
-        val clampedX = offsetX.coerceIn(-rw + aabbHalfW, rw - aabbHalfW)
-        val clampedZ = offsetZ.coerceIn(-rd + aabbHalfD, rd - aabbHalfD)
+        val minX = -rw + aabbHalfW
+        val maxX = rw - aabbHalfW
+        val clampedX = if (minX > maxX) 0f else offsetX.coerceIn(minX, maxX)
+
+        val minZ = -rd + aabbHalfD
+        val maxZ = rd - aabbHalfD
+        val clampedZ = if (minZ > maxZ) 0f else offsetZ.coerceIn(minZ, maxZ)
+
         return Pair(clampedX, clampedZ)
     }
 }

@@ -90,6 +90,6 @@ class ArScreenPremiumTest {
         }
 
         // Verify overlay and rendering doesn't crash, and screen is drawn
-        composeTestRule.onNodeWithText("배치할 크기: 가로 100.0cm x 세로 200.0cm x 깊이 100.0cm").assertExists()
+        composeTestRule.onNodeWithText("100×200×100cm").assertExists()
     }
 }

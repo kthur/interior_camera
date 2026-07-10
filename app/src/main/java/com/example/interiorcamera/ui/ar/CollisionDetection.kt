@@ -81,16 +81,13 @@ object CollisionDetection {
             val minB = projB.first
             val maxB = projB.second
 
-            val overlap = minOf(maxA, maxB) - maxOf(minA, minB)
-            if (overlap <= 0f) {
-                // Separating axis found, no collision
-                return CollisionResult(false)
-            }
-
+            val overlapL = maxA - minB
+            val overlapR = maxB - minA
+            if (overlapL <= 0f || overlapR <= 0f) return CollisionResult(false)
+            val overlap = minOf(overlapL, overlapR)
             if (overlap < minOverlap) {
                 minOverlap = overlap
-                // Orient axis to point from staticObb (B) to activeObb (A)
-                mtvAxis = if (dir.dot(axis) < 0f) axis * -1f else axis
+                mtvAxis = if (overlapL < overlapR) axis * -1f else axis
             }
         }
 

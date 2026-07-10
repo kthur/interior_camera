@@ -2,6 +2,7 @@ package com.example.interiorcamera.ui.floorplan
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -19,6 +20,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 
 @Composable
 fun FloorplanCanvas(
@@ -30,6 +32,7 @@ fun FloorplanCanvas(
     onSelectItem: (String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val density = LocalDensity.current
     var canvasWidth by remember { mutableStateOf(600f) }
     var canvasHeight by remember { mutableStateOf(600f) }
 
@@ -86,14 +89,23 @@ fun FloorplanCanvas(
                 roomDepthCm
             )
 
+            val currentPlacedItems by rememberUpdatedState(placedItems)
+            val currentRoomWidth by rememberUpdatedState(roomWidthCm)
+            val currentRoomDepth by rememberUpdatedState(roomDepthCm)
+            val currentCanvasWidth by rememberUpdatedState(canvasWidth)
+            val currentCanvasHeight by rememberUpdatedState(canvasHeight)
+
             // Convert to density independent positioning safely
             Box(
                 modifier = Modifier
                     .offset(
-                        x = ((screenX - itemWidthPx / 2f) / 3f).dp,
-                        y = ((screenY - itemDepthPx / 2f) / 3f).dp
+                        x = with(density) { (screenX - itemWidthPx / 2f).toDp() },
+                        y = with(density) { (screenY - itemDepthPx / 2f).toDp() }
                     )
-                    .size(width = (itemWidthPx / 3f).dp, height = (itemDepthPx / 3f).dp)
+                    .size(
+                        width = with(density) { itemWidthPx.toDp() },
+                        height = with(density) { itemDepthPx.toDp() }
+                    )
                     .graphicsLayer {
                         rotationZ = item.rotationDegrees
                     }
@@ -114,26 +126,35 @@ fun FloorplanCanvas(
                     .pointerInput(item.name) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
-                            val newScreenX = screenX + dragAmount.x
-                            val newScreenY = screenY + dragAmount.y
+                            val latestItem = currentPlacedItems.find { it.name == item.name } ?: item
+                            val (currScreenX, currScreenY) = FloorplanCoordinator.relativeToScreen(
+                                latestItem.offsetX,
+                                latestItem.offsetZ,
+                                currentCanvasWidth,
+                                currentCanvasHeight,
+                                currentRoomWidth,
+                                currentRoomDepth
+                            )
+                            val newScreenX = currScreenX + dragAmount.x
+                            val newScreenY = currScreenY + dragAmount.y
                             val (relX, relZ) = FloorplanCoordinator.screenToRelative(
                                 newScreenX,
                                 newScreenY,
-                                canvasWidth,
-                                canvasHeight,
-                                roomWidthCm,
-                                roomDepthCm
+                                currentCanvasWidth,
+                                currentCanvasHeight,
+                                currentRoomWidth,
+                                currentRoomDepth
                             )
                             val (clampedX, clampedZ) = FloorplanCoordinator.clampToRoomBounds(
                                 relX,
                                 relZ,
-                                item.rotationDegrees,
-                                item.widthCm,
-                                item.depthCm,
-                                roomWidthCm,
-                                roomDepthCm
+                                latestItem.rotationDegrees,
+                                latestItem.widthCm,
+                                latestItem.depthCm,
+                                currentRoomWidth,
+                                currentRoomDepth
                             )
-                            val updatedList = placedItems.map {
+                            val updatedList = currentPlacedItems.map {
                                 if (it.name == item.name) {
                                     it.copy(offsetX = clampedX, offsetZ = clampedZ)
                                 } else it
@@ -143,12 +164,24 @@ fun FloorplanCanvas(
                     }
                     .testTag("FurnitureBlock_${item.name}")
             ) {
-                Text(
-                    text = item.name,
-                    fontSize = 10.sp,
-                    color = Color.Black,
-                    modifier = Modifier.align(Alignment.Center)
-                )
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = item.name,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = "${item.widthCm.toInt()}x${item.depthCm.toInt()} cm",
+                        fontSize = 8.sp,
+                        color = Color.DarkGray,
+                        maxLines = 1
+                    )
+                }
             }
         }
     }

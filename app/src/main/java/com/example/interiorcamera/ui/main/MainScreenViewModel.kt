@@ -52,6 +52,14 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
     }
   }
 
+  fun deletePreset(presetId: String) {
+    viewModelScope.launch {
+      try {
+        dataRepository.deletePreset(presetId)
+      } catch (_: Exception) {}
+    }
+  }
+
   companion object {
     val Factory: ViewModelProvider.Factory = viewModelFactory {
       initializer {

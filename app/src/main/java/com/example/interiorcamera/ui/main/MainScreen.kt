@@ -7,7 +7,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -45,12 +44,21 @@ import com.google.ar.core.ArCoreApk
 import java.util.UUID
 
 val PRESETS = listOf(
-  PresetItem("양문형 냉장고", 91.2f, 178.4f, 75.0f, "refrigerator.glb"),
-  PresetItem("드럼 세탁기", 60.0f, 85.0f, 65.0f, "cube.glb"),
-  PresetItem("4도어 김치냉장고", 66.6f, 179.7f, 69.5f, "refrigerator.glb"),
-  PresetItem("식기세척기 (빌트인)", 59.8f, 84.5f, 57.3f, "cube.glb"),
-  PresetItem("옷장 (자작)", 100.0f, 210.0f, 60.0f, "cube.glb")
+  PresetItem(name = "양문형 냉장고", width = 91.2f, height = 178.4f, depth = 75.0f, modelName = "refrigerator.glb"),
+  PresetItem(name = "드럼 세탁기", width = 60.0f, height = 85.0f, depth = 65.0f, modelName = "cube.glb"),
+  PresetItem(name = "4도어 김치냉장고", width = 66.6f, height = 179.7f, depth = 69.5f, modelName = "refrigerator.glb"),
+  PresetItem(name = "식기세척기 (빌트인)", width = 59.8f, height = 84.5f, depth = 57.3f, modelName = "cube.glb"),
+  PresetItem(name = "옷장 (자작)", width = 100.0f, height = 210.0f, depth = 60.0f, modelName = "cube.glb")
 )
+
+fun getPresetCategory(name: String): String {
+  return when {
+    name.contains("냉장고") || name.contains("식기세척기") -> "주방"
+    name.contains("세탁기") -> "다용도실"
+    name.contains("옷장") || name.contains("침대") || name.contains("소파") || name.contains("식탁") -> "침실/거실"
+    else -> "기타"
+  }
+}
 
 @Composable
 fun MainScreen(
@@ -63,6 +71,7 @@ fun MainScreen(
     uiState = uiState,
     onItemClick = onItemClick,
     onSavePreset = { viewModel.savePreset(it) },
+    onDeletePreset = { viewModel.deletePreset(it) },
     onSaveRoomPreset = { viewModel.saveRoomPreset(it) },
     onDeleteRoomPreset = { viewModel.deleteRoomPreset(it) },
     modifier = modifier
@@ -74,6 +83,7 @@ fun MainScreenContent(
   uiState: MainScreenUiState,
   onItemClick: (NavKey) -> Unit,
   onSavePreset: (PresetItem) -> Unit,
+  onDeletePreset: (String) -> Unit,
   onSaveRoomPreset: (RoomPreset) -> Unit,
   onDeleteRoomPreset: (String) -> Unit,
   modifier: Modifier = Modifier
@@ -95,6 +105,9 @@ fun MainScreenContent(
 
   var activeFloorplanRoom by remember { mutableStateOf<RoomPreset?>(null) }
 
+  var selectedCategory by remember { mutableStateOf("전체") }
+  val categories = listOf("전체", "주방", "다용도실", "침실/거실", "기타")
+
   val permissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestPermission()
   ) { isGranted ->
@@ -111,7 +124,7 @@ fun MainScreenContent(
 
   Column(modifier = modifier.fillMaxSize()) {
     Spacer(modifier = Modifier.height(12.dp))
-    Image(
+    androidx.compose.foundation.Image(
       painter = androidx.compose.ui.res.painterResource(id = com.example.interiorcamera.R.drawable.ic_app_logo),
       contentDescription = "FitCheck AR Logo",
       modifier = Modifier
@@ -171,16 +184,39 @@ fun MainScreenContent(
 
           HorizontalDivider()
 
+          // R3. Category Selection Tab/Chips Row
+          Text(
+            text = "카테고리 필터",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+          )
+          Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            categories.forEach { category ->
+              ElevatedFilterChip(
+                selected = selectedCategory == category,
+                onClick = { selectedCategory = category },
+                label = { Text(category) }
+              )
+            }
+          }
+
           Text(
             text = "자주 찾는 제품 규격 (프리셋)",
             style = MaterialTheme.typography.titleMedium
           )
 
+          val filteredPresets = remember(selectedCategory) {
+            if (selectedCategory == "전체") PRESETS else PRESETS.filter { getPresetCategory(it.name) == selectedCategory }
+          }
+
           Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
           ) {
-            PRESETS.chunked(2).forEach { rowPresets ->
+            filteredPresets.chunked(2).forEach { rowPresets ->
               Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -210,7 +246,11 @@ fun MainScreenContent(
 
           if (uiState is MainScreenUiState.Success) {
             val customPresets = uiState.presets
-            if (customPresets.isNotEmpty()) {
+            val filteredCustomPresets = remember(customPresets, selectedCategory) {
+              if (selectedCategory == "전체") customPresets else customPresets.filter { getPresetCategory(it.name) == selectedCategory }
+            }
+
+            if (filteredCustomPresets.isNotEmpty()) {
               HorizontalDivider()
               Text(
                 text = "나의 리스트",
@@ -221,7 +261,7 @@ fun MainScreenContent(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
               ) {
-                customPresets.chunked(2).forEach { rowPresets ->
+                filteredCustomPresets.chunked(2).forEach { rowPresets ->
                   Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -232,6 +272,8 @@ fun MainScreenContent(
                           widthStr == preset.width.toString() &&
                           heightStr == preset.height.toString() &&
                           depthStr == preset.depth.toString()
+                      
+                      // R1. Trailing delete icon added on Custom Preset chips
                       FilterChip(
                         selected = isSelected,
                         onClick = {
@@ -243,6 +285,14 @@ fun MainScreenContent(
                           modelName = preset.modelName
                         },
                         label = { Text(preset.name) },
+                        trailingIcon = {
+                          IconButton(
+                            onClick = { onDeletePreset(preset.id) },
+                            modifier = Modifier.size(18.dp)
+                          ) {
+                            Text("❌", fontSize = 9.sp, color = Color.Red)
+                          }
+                        },
                         modifier = Modifier.weight(1f)
                       )
                     }
@@ -502,11 +552,19 @@ fun MainScreenContent(
                 modifier = Modifier.padding(vertical = 16.dp)
               )
             } else {
+              // R6. Favorites first, then newest timestamp room list sorting
+              val sortedRooms = remember(roomPresets) {
+                roomPresets.sortedWith(
+                  compareByDescending<RoomPreset> { it.isFavorite }
+                    .thenByDescending { it.timestamp }
+                )
+              }
+
               Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
               ) {
-                roomPresets.forEach { room ->
+                sortedRooms.forEach { room ->
                   Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -519,7 +577,7 @@ fun MainScreenContent(
                         .padding(16.dp),
                       verticalAlignment = Alignment.CenterVertically
                     ) {
-                      val ratio = (room.widthCm / room.depthCm).coerceIn(0.5f, 2.0f)
+                      val ratio = if (room.depthCm > 0f) (room.widthCm / room.depthCm).coerceIn(0.5f, 2.0f) else 1.0f
                       val boxWidth = if (ratio > 1f) 64.dp else (64 * ratio).dp
                       val boxHeight = if (ratio < 1f) 64.dp else (64 / ratio).dp
                       Box(
@@ -554,6 +612,13 @@ fun MainScreenContent(
                       }
 
                       Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        // R6. Favorite (⭐/☆) star toggle button
+                        IconButton(
+                          onClick = { onSaveRoomPreset(room.copy(isFavorite = !room.isFavorite)) }
+                        ) {
+                          Text(if (room.isFavorite) "⭐" else "☆", fontSize = 18.sp)
+                        }
+
                         // 2D 도면 배치 에디터 실행 버튼
                         OutlinedButton(
                           onClick = { activeFloorplanRoom = room },
@@ -816,6 +881,7 @@ fun MainScreenPreview() {
       uiState = MainScreenUiState.Success(emptyList()),
       onItemClick = {},
       onSavePreset = {},
+      onDeletePreset = {},
       onSaveRoomPreset = {},
       onDeleteRoomPreset = {}
     )

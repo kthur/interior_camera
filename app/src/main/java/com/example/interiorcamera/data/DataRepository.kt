@@ -12,6 +12,7 @@ interface DataRepository {
   val data: Flow<List<PresetItem>>
   val roomPresets: Flow<List<RoomPreset>>
   suspend fun savePreset(preset: PresetItem)
+  suspend fun deletePreset(presetId: String)
   suspend fun saveRoomPreset(preset: RoomPreset)
   suspend fun deleteRoomPreset(presetId: String)
 }
@@ -37,12 +38,13 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         val list = mutableListOf<PresetItem>()
         for (i in 0 until jsonArray.length()) {
           val obj = jsonArray.getJSONObject(i)
+          val id = obj.optString("id", java.util.UUID.randomUUID().toString())
           val name = obj.getString("name")
           val width = obj.getDouble("width").toFloat()
           val height = obj.getDouble("height").toFloat()
           val depth = obj.getDouble("depth").toFloat()
           val modelName = obj.optString("modelName", "cube.glb")
-          list.add(PresetItem(name, width, height, depth, modelName))
+          list.add(PresetItem(id, name, width, height, depth, modelName))
         }
         _data.value = list
       } catch (e: Exception) {
@@ -57,9 +59,21 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     val currentList = _data.value.toMutableList()
     currentList.add(preset)
 
+    savePresetsToSharedPrefs(currentList)
+  }
+
+  override suspend fun deletePreset(presetId: String) {
+    val currentList = _data.value.toMutableList()
+    currentList.removeAll { it.id == presetId }
+
+    savePresetsToSharedPrefs(currentList)
+  }
+
+  private fun savePresetsToSharedPrefs(list: List<PresetItem>) {
     val jsonArray = JSONArray()
-    for (item in currentList) {
+    for (item in list) {
       val obj = JSONObject()
+      obj.put("id", item.id)
       obj.put("name", item.name)
       obj.put("width", item.width.toDouble())
       obj.put("height", item.height.toDouble())
@@ -69,7 +83,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     }
 
     sharedPreferences.edit().putString("presets", jsonArray.toString()).apply()
-    _data.value = currentList
+    _data.value = list
   }
 
   private fun loadRoomPresets() {
@@ -105,7 +119,8 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
               )
             }
           }
-          list.add(RoomPreset(id, name, width, depth, timestamp, itemsList))
+          val isFavorite = obj.optBoolean("isFavorite", false)
+          list.add(RoomPreset(id, name, width, depth, timestamp, itemsList, isFavorite))
         }
         _roomPresets.value = list
       } catch (e: Exception) {
@@ -140,6 +155,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
       obj.put("width", item.widthCm.toDouble())
       obj.put("depth", item.depthCm.toDouble())
       obj.put("timestamp", item.timestamp)
+      obj.put("isFavorite", item.isFavorite)
       
       val itemsArray = JSONArray()
       for (arItem in item.items) {

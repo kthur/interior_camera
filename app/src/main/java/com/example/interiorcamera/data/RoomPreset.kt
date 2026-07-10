@@ -8,5 +8,6 @@ data class RoomPreset(
   val widthCm: Float,
   val depthCm: Float,
   val timestamp: Long,
-  val items: List<ArPlacedItem> = emptyList()
+  val items: List<ArPlacedItem> = emptyList(),
+  val isFavorite: Boolean = false
 )

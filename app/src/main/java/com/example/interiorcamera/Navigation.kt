@@ -3,8 +3,10 @@ package com.example.interiorcamera
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
@@ -12,8 +14,14 @@ import com.example.interiorcamera.ui.main.MainScreen
 import com.example.interiorcamera.ui.ar.ArScreen
 
 @Composable
-fun MainNavigation() {
+fun MainNavigation(deepLinkKey: NavKey? = null) {
   val backStack = rememberNavBackStack(Main)
+
+  LaunchedEffect(deepLinkKey) {
+    if (deepLinkKey != null) {
+      backStack.add(deepLinkKey)
+    }
+  }
 
   NavDisplay(
     backStack = backStack,

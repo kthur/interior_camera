@@ -11,6 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.Mockito.mock
+import com.example.interiorcamera.data.RecommendedFurniture
 
 class ArScreenTest {
 
@@ -39,8 +40,8 @@ class ArScreenTest {
       )
     }
 
-    composeTestRule.onNodeWithText("배치할 크기: 가로 100.0cm x 세로 200.0cm x 깊이 60.0cm").assertExists()
-    composeTestRule.onNodeWithText("주변 평면 인식 중...").assertExists()
+    composeTestRule.onNodeWithText("바닥을 터치해 배치").assertExists()
+    composeTestRule.onNodeWithText("주변 공간 인식 중").assertExists()
   }
 
   @Test
@@ -64,7 +65,7 @@ class ArScreenTest {
       )
     }
 
-    composeTestRule.onNodeWithText("카메라를 천천히 좌우로 흔들면서 바닥면이나 평평한 표면을 비춰주세요.").assertExists()
+    composeTestRule.onNodeWithText("스마트폰을 천천히 흔들며 바닥면과 주변 벽면을 비춰 공간을 스캔하세요.").assertExists()
   }
 
   @Test
@@ -88,7 +89,7 @@ class ArScreenTest {
       )
     }
 
-    composeTestRule.onNodeWithText("선택된 제품 설정 (cube.glb)").assertDoesNotExist()
+    composeTestRule.onNodeWithText("cube.glb").assertDoesNotExist()
   }
 
   @Test
@@ -112,7 +113,7 @@ class ArScreenTest {
       )
     }
 
-    composeTestRule.onNodeWithText("선택된 제품 설정 (cube.glb)").assertExists()
+    composeTestRule.onNodeWithText("cube.glb").assertExists()
   }
 
   @Test
@@ -173,7 +174,7 @@ class ArScreenTest {
       )
     }
 
-    composeTestRule.onNodeWithText("왼쪽 15°").performClick()
+    composeTestRule.onNodeWithText("↺").performClick()
     assertTrue(rotateLeftClicked)
   }
 
@@ -200,7 +201,7 @@ class ArScreenTest {
       )
     }
 
-    composeTestRule.onNodeWithText("오른쪽 15°").performClick()
+    composeTestRule.onNodeWithText("↻").performClick()
     assertTrue(rotateRightClicked)
   }
 
@@ -254,7 +255,7 @@ class ArScreenTest {
       )
     }
 
-    composeTestRule.onNodeWithText("모두 지우기").performClick()
+    composeTestRule.onNodeWithText("전체\n삭제").performClick()
     assertTrue(clearAllClicked)
   }
 
@@ -281,7 +282,7 @@ class ArScreenTest {
       )
     }
 
-    composeTestRule.onNodeWithText("뒤로 가기").performClick()
+    composeTestRule.onNodeWithText("←").performClick()
     assertTrue(backClicked)
   }
 
@@ -330,7 +331,7 @@ class ArScreenTest {
       )
     }
 
-    composeTestRule.onNodeWithText("배치할 크기: 가로 150.0cm x 세로 180.0cm x 깊이 90.0cm").assertExists()
+    composeTestRule.onNodeWithText("바닥을 터치해 배치").assertExists()
   }
 
   @Test
@@ -354,8 +355,7 @@ class ArScreenTest {
       )
     }
 
-    // Find progress indicator by role or by searching for the "주변 평면 인식 중..." container contents
-    composeTestRule.onNodeWithText("주변 평면 인식 중...").assertExists()
+    composeTestRule.onNodeWithText("주변 공간 인식 중").assertExists()
   }
 
   @Test
@@ -379,7 +379,7 @@ class ArScreenTest {
       )
     }
 
-    composeTestRule.onNodeWithText("주변 평면 인식 중...").assertDoesNotExist()
+    composeTestRule.onNodeWithText("주변 공간 인식 중").assertDoesNotExist()
   }
 
   @Test
@@ -405,7 +405,7 @@ class ArScreenTest {
       )
     }
 
-    composeTestRule.onNodeWithText("선택 해제").performClick()
+    composeTestRule.onNodeWithText("해제").performClick()
     assertTrue(deselectClicked)
   }
 
@@ -426,12 +426,17 @@ class ArScreenTest {
         onRotateRight = {},
         onDeselect = {},
         onDeleteItem = {},
-        onClearAll = {}
+        onClearAll = {},
+        isRulerModeActive = true,
+        measuredDistanceCm = 125.5f
       )
     }
-    composeTestRule.onNodeWithText("Ruler Mode").assertExists()
-    composeTestRule.onNodeWithText("자 모드 끄기").assertExists()
-    composeTestRule.onNodeWithText("거리: 125.5cm").assertExists()
+    composeTestRule.onNodeWithText("자\nON").assertExists()
+    composeTestRule.onNodeWithText("📏 125.5cm").assertExists()
+    
+    composeTestRule.onNodeWithText("자\nON").performClick()
+    composeTestRule.onNodeWithText("📏 자 모드").assertExists()
+    composeTestRule.onNodeWithText("측정 거리: 125.5 cm").assertExists()
   }
 
   @Test
@@ -451,10 +456,13 @@ class ArScreenTest {
         onRotateRight = {},
         onDeselect = {},
         onDeleteItem = {},
-        onClearAll = {}
+        onClearAll = {},
+        calibrationFactor = 1.0f
       )
     }
-    composeTestRule.onNodeWithText("보정 계수: 1.00").assertExists()
+    composeTestRule.onNodeWithText("보정").performClick()
+    composeTestRule.onNodeWithText("🎚 크기 보정").assertExists()
+    composeTestRule.onNodeWithText("100%").assertExists()
   }
 
   @Test
@@ -474,10 +482,12 @@ class ArScreenTest {
         onRotateRight = {},
         onDeselect = {},
         onDeleteItem = {},
-        onClearAll = {}
+        onClearAll = {},
+        calibrationFactor = 1.15f
       )
     }
-    composeTestRule.onNodeWithText("보정 계수: 1.15").assertExists()
+    composeTestRule.onNodeWithText("보정").performClick()
+    composeTestRule.onNodeWithText("115%").assertExists()
   }
 
   @Test
@@ -497,15 +507,20 @@ class ArScreenTest {
         onRotateRight = {},
         onDeselect = {},
         onDeleteItem = {},
-        onClearAll = {}
+        onClearAll = {},
+        recommendedFurniture = listOf(
+          RecommendedFurniture("Cozy Sofa", "IKEA", "₩350,000", "Living Room", 160f, 85f, 90f, "cube.glb")
+        )
       )
     }
-    composeTestRule.onNodeWithText("추천 가구").assertExists()
-    composeTestRule.onNodeWithText("Sofa (150x85)").assertExists()
+    composeTestRule.onNodeWithText("추천").performClick()
+    composeTestRule.onNodeWithText("🛋 추천 가구").assertExists()
+    composeTestRule.onNodeWithText("[IKEA] Cozy Sofa").assertExists()
   }
 
   @Test
   fun testRecommendationPanel_SelectAndPlace() {
+    var selectClicked = false
     composeTestRule.setContent {
       ArScreenContent(
         widthCm = 100f,
@@ -521,10 +536,16 @@ class ArScreenTest {
         onRotateRight = {},
         onDeselect = {},
         onDeleteItem = {},
-        onClearAll = {}
+        onClearAll = {},
+        recommendedFurniture = listOf(
+          RecommendedFurniture("Cozy Sofa", "IKEA", "₩350,000", "Living Room", 160f, 85f, 90f, "cube.glb")
+        ),
+        onSelectRecommended = { selectClicked = true }
       )
     }
-    composeTestRule.onNodeWithText("Chair (60x90)").performClick()
+    composeTestRule.onNodeWithText("추천").performClick()
+    composeTestRule.onNodeWithText("[IKEA] Cozy Sofa").performClick()
+    assertTrue(selectClicked)
   }
 
   @Test
@@ -544,15 +565,23 @@ class ArScreenTest {
         onRotateRight = {},
         onDeselect = {},
         onDeleteItem = {},
-        onClearAll = {}
+        onClearAll = {},
+        isRulerModeActive = true,
+        measuredDistanceCm = 150.0f,
+        recommendedFurniture = listOf(
+          RecommendedFurniture("Cozy Sofa", "IKEA", "₩350,000", "Living Room", 160f, 85f, 90f, "cube.glb")
+        )
       )
     }
-    composeTestRule.onNodeWithText("거리: 150.0cm").assertExists()
-    composeTestRule.onNodeWithText("Table (120x75)").assertExists()
+    composeTestRule.onNodeWithText("📏 150.0cm").assertExists()
+    composeTestRule.onNodeWithText("추천").performClick()
+    composeTestRule.onNodeWithText("🛋 추천 가구").assertExists()
+    composeTestRule.onNodeWithText("공간 150cm 기준 필터링").assertExists()
   }
 
   @Test
   fun testRulerAndRecommendation_ClearRulerResetsPanel() {
+    var clearRulerClicked = false
     composeTestRule.setContent {
       ArScreenContent(
         widthCm = 100f,
@@ -568,10 +597,15 @@ class ArScreenTest {
         onRotateRight = {},
         onDeselect = {},
         onDeleteItem = {},
-        onClearAll = {}
+        onClearAll = {},
+        isRulerModeActive = true,
+        measuredDistanceCm = 150.0f,
+        onClearRuler = { clearRulerClicked = true }
       )
     }
+    composeTestRule.onNodeWithText("자\nON").performClick()
     composeTestRule.onNodeWithText("자 지우기").performClick()
+    assertTrue(clearRulerClicked)
   }
 
   @Test
@@ -591,14 +625,17 @@ class ArScreenTest {
         onRotateRight = {},
         onDeselect = {},
         onDeleteItem = {},
-        onClearAll = {}
+        onClearAll = {},
+        safetyWarning = "공간 부족"
       )
     }
-    composeTestRule.onNodeWithText("공간 부족: 안전 마진 최소 5cm 필요").assertExists()
+    composeTestRule.onNodeWithText("추천").performClick()
+    composeTestRule.onNodeWithText("공간 부족").assertExists()
   }
 
   @Test
   fun testWorkflow_MeasureSpaceAndPlaceMatchingFurniture() {
+    var placedClicked = false
     composeTestRule.setContent {
       ArScreenContent(
         widthCm = 100f,
@@ -614,11 +651,19 @@ class ArScreenTest {
         onRotateRight = {},
         onDeselect = {},
         onDeleteItem = {},
-        onClearAll = {}
+        onClearAll = {},
+        isRulerModeActive = true,
+        measuredDistanceCm = 180.0f,
+        recommendedFurniture = listOf(
+          RecommendedFurniture("Single Bed", "IKEA", "₩250,000", "Bedroom", 100f, 45f, 200f, "cube.glb")
+        ),
+        onSelectRecommended = { placedClicked = true }
       )
     }
-    composeTestRule.onNodeWithText("거리: 180.0cm").assertExists()
-    composeTestRule.onNodeWithText("Bed (160x45)").performClick()
+    composeTestRule.onNodeWithText("📏 180.0cm").assertExists()
+    composeTestRule.onNodeWithText("추천").performClick()
+    composeTestRule.onNodeWithText("[IKEA] Single Bed").performClick()
+    assertTrue(placedClicked)
   }
 
   @Test
@@ -638,10 +683,12 @@ class ArScreenTest {
         onRotateRight = {},
         onDeselect = {},
         onDeleteItem = {},
-        onClearAll = {}
+        onClearAll = {},
+        calibrationFactor = 1.10f
       )
     }
-    composeTestRule.onNodeWithText("보정 계수: 1.10").assertExists()
+    composeTestRule.onNodeWithText("보정").performClick()
+    composeTestRule.onNodeWithText("110%").assertExists()
   }
 
   @Test
@@ -661,10 +708,12 @@ class ArScreenTest {
         onRotateRight = {},
         onDeselect = {},
         onDeleteItem = {},
-        onClearAll = {}
+        onClearAll = {},
+        isRulerModeActive = true,
+        measuredDistanceCm = 100.0f
       )
     }
-    composeTestRule.onNodeWithText("거리: 100.0cm").assertExists()
+    composeTestRule.onNodeWithText("📏 100.0cm").assertExists()
 
     composeTestRule.setContent {
       ArScreenContent(
@@ -681,10 +730,12 @@ class ArScreenTest {
         onRotateRight = {},
         onDeselect = {},
         onDeleteItem = {},
-        onClearAll = {}
+        onClearAll = {},
+        isRulerModeActive = true,
+        measuredDistanceCm = 200.0f
       )
     }
-    composeTestRule.onNodeWithText("거리: 200.0cm").assertExists()
+    composeTestRule.onNodeWithText("📏 200.0cm").assertExists()
   }
 
   @Test
@@ -707,7 +758,7 @@ class ArScreenTest {
         onClearAll = {}
       )
     }
-    composeTestRule.onNodeWithText("카메라를 천천히 좌우로 흔들면서 바닥면이나 평평한 표면을 비춰주세요.").assertExists()
+    composeTestRule.onNodeWithText("주변 공간 인식 중").assertExists()
 
     composeTestRule.setContent {
       ArScreenContent(
@@ -727,6 +778,6 @@ class ArScreenTest {
         onClearAll = {}
       )
     }
-    composeTestRule.onNodeWithText("카메라를 천천히 좌우로 흔들면서 바닥면이나 평평한 표면을 비춰주세요.").assertDoesNotExist()
+    composeTestRule.onNodeWithText("주변 공간 인식 중").assertDoesNotExist()
   }
 }

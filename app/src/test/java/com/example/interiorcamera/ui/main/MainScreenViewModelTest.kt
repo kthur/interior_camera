@@ -12,8 +12,28 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Test
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.resetMain
+import org.junit.After
+import org.junit.Before
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class MainScreenViewModelTest {
+  private val testDispatcher = UnconfinedTestDispatcher()
+
+  @Before
+  fun setUp() {
+    Dispatchers.setMain(testDispatcher)
+  }
+
+  @After
+  fun tearDown() {
+    Dispatchers.resetMain()
+  }
+
   @Test
   fun uiState_initiallyLoading() = runTest {
     val repository = FakeMyModelRepository()

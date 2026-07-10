@@ -46,6 +46,7 @@ import com.google.ar.core.HitResult
 import com.google.ar.core.Plane
 import com.google.ar.core.Pose
 import com.google.ar.core.TrackingState
+import com.google.ar.core.LightEstimate
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Scale
 import io.github.sceneview.math.Rotation
@@ -120,6 +121,7 @@ fun ArScreen(
   val engine = rememberEngine()
   val modelLoader = rememberModelLoader(engine)
   var frame by remember { mutableStateOf<Frame?>(null) }
+  var ambientColorCorrection by remember { mutableStateOf(floatArrayOf(1.0f, 1.0f, 1.0f, 1.0f)) }
 
   var placedItems by remember { mutableStateOf(emptyList<PlacedItem>()) }
   var selectedItemId by remember { mutableStateOf<String?>(null) }
@@ -259,12 +261,57 @@ fun ArScreen(
           val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
           val canvas = AndroidCanvas(bitmap)
           view.draw(canvas)
+
+          // R7. Elegant Watermark synthesis
+          val watermarkPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.parseColor("#A6000000") // Dark translucent
+            style = android.graphics.Paint.Style.FILL
+            isAntiAlias = true
+          }
+          val textPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 28f
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            isAntiAlias = true
+          }
+          val subTextPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.parseColor("#CCCCCC")
+            textSize = 18f
+            isAntiAlias = true
+          }
+
+          val cardWidth = 440f
+          val cardHeight = 110f
+          val margin = 40f
+          val left = bitmap.width - cardWidth - margin
+          val top = bitmap.height - cardHeight - margin
+          val right = bitmap.width - margin
+          val bottom = bitmap.height - margin
+
+          val rectF = android.graphics.RectF(left, top, right, bottom)
+          canvas.drawRoundRect(rectF, 12f, 12f, watermarkPaint)
+
+          canvas.drawText("FitCheck AR", left + 24f, top + 42f, textPaint)
+          val countInfo = if (placedItems.isNotEmpty()) "${placedItems.size}개 가구 배치됨" else "인테리어 공간 측정"
+          val sizeInfo = "방 크기: ${widthCm.toInt()}x${depthCm.toInt()}cm"
+          canvas.drawText("$countInfo • $sizeInfo", left + 24f, top + 80f, subTextPaint)
+
+          // Save cache copy for quick sharing intent
           val dir = File(context.cacheDir, "screenshots")
           dir.mkdirs()
-          val file = File(dir, "fircheck_${System.currentTimeMillis()}.png")
+          val file = File(dir, "fitcheck_${System.currentTimeMillis()}.png")
           FileOutputStream(file).use { out ->
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
           }
+
+          // Save permanent copy to Snapshots Gallery directory
+          val snapshotDir = File(context.filesDir, "snapshots")
+          snapshotDir.mkdirs()
+          val galleryFile = File(snapshotDir, "snapshot_${System.currentTimeMillis()}.jpg")
+          FileOutputStream(galleryFile).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+          }
+
           val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
           val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "image/png"
@@ -272,7 +319,7 @@ fun ArScreen(
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
           }
           context.startActivity(Intent.createChooser(shareIntent, "스크린샷 공유"))
-          Toast.makeText(context, "캡처 저장 완료", Toast.LENGTH_LONG).show()
+          Toast.makeText(context, "스냅샷 갤러리에 저장 완료", Toast.LENGTH_LONG).show()
         }
       } catch (e: Exception) {
         Toast.makeText(context, "캡처 실패: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -343,12 +390,16 @@ fun ArScreen(
         val pose = item.anchor.pose
         val offset = Pose(floatArrayOf(dx, 0f, dz), floatArrayOf(0f, 0f, 0f, 1f))
         var targetPose = offset.compose(pose)
+        var targetRotationDegrees = item.rotationDegrees
         
         // R3: Wall snapping math integration
         val snappedPose = findNearestVerticalPlaneSnap(arSession, targetPose, 0.15f)
         if (snappedPose != null) {
           targetPose = snappedPose
           triggerHapticFeedback(context) // Haptic feedback on snap
+          val qx = targetPose.qx(); val qy = targetPose.qy(); val qz = targetPose.qz(); val qw = targetPose.qw()
+          val yaw = atan2(2f * (qw * qy + qx * qz), 1f - 2f * (qy * qy + qz * qz))
+          targetRotationDegrees = yaw * (180f / 3.14159265f)
         }
 
         // Real-time collision detection (SAT) and resolution (MTV)
@@ -357,7 +408,7 @@ fun ArScreen(
           z = targetPose.tz(),
           hw = (item.widthCm / 100f * calibrationFactor) / 2f,
           hd = (item.depthCm / 100f * calibrationFactor) / 2f,
-          rotationDegrees = item.rotationDegrees
+          rotationDegrees = targetRotationDegrees
         )
 
         var collidingResult: CollisionResult? = null
@@ -388,27 +439,32 @@ fun ArScreen(
         val newAnchor = arSession?.createAnchor(targetPose)
         if (newAnchor != null) {
           placedItems = placedItems.map {
-            if (it.id == item.id) it.copy(anchor = newAnchor) else it
+            if (it.id == item.id) it.copy(anchor = newAnchor, rotationDegrees = targetRotationDegrees) else it
           }
           try { item.anchor.detach() } catch (_: Exception) {}
         }
       } catch (_: Exception) {}
     },
     onConfirmGhost = {
-      ghostAnchor?.let { anchor ->
-        val newItem = PlacedItem(
-          id = java.util.UUID.randomUUID().toString(),
-          anchor = anchor,
-          widthCm = effectiveWidthCm,
-          heightCm = effectiveHeightCm,
-          depthCm = effectiveDepthCm,
-          modelName = effectiveModelName,
-          rotationDegrees = 0f,
-          opacity = 0.8f
-        )
-        placedItems = placedItems + newItem
-        selectedItemId = newItem.id
-        pushAction(ArAction.Place(newItem))
+      // R5. Max placement limit check
+      if (placedItems.size >= 8) {
+        Toast.makeText(context, "안정적인 실행을 위해 가구는 최대 8개까지 배치할 수 있습니다.", Toast.LENGTH_LONG).show()
+      } else {
+        ghostAnchor?.let { anchor ->
+          val newItem = PlacedItem(
+            id = java.util.UUID.randomUUID().toString(),
+            anchor = anchor,
+            widthCm = effectiveWidthCm,
+            heightCm = effectiveHeightCm,
+            depthCm = effectiveDepthCm,
+            modelName = effectiveModelName,
+            rotationDegrees = 0f,
+            opacity = 0.8f
+          )
+          placedItems = placedItems + newItem
+          selectedItemId = newItem.id
+          pushAction(ArAction.Place(newItem))
+        }
       }
       ghostAnchor = null
       showGhost = false
@@ -533,6 +589,14 @@ fun ArScreen(
             }
             frame = updatedFrame
             trackingState = updatedFrame.camera.trackingState
+
+            val lightEstimate = updatedFrame.lightEstimate
+            if (lightEstimate.state == LightEstimate.State.VALID) {
+                val correction = FloatArray(4)
+                lightEstimate.getColorCorrection(correction, 0)
+                ambientColorCorrection = correction
+            }
+
             if (!isPlaneDetected) {
               val planes = session.getAllTrackables(Plane::class.java)
               val horizontalPlane = planes.find { it.type == Plane.Type.HORIZONTAL_UPWARD_FACING || it.type == Plane.Type.HORIZONTAL_DOWNWARD_FACING } ?: planes.firstOrNull()
@@ -552,14 +616,9 @@ fun ArScreen(
                       0f,
                       cos(yawRad / 2.0).toFloat()
                     )
-                    val targetPose = Pose(
-                      floatArrayOf(
-                        centerPose.tx() + relativeX,
-                        centerPose.ty(),
-                        centerPose.tz() + relativeZ
-                      ),
-                      multiplyQuaternions(centerPose.rotationQuaternion, qRot)
-                    )
+                    val localOffset = floatArrayOf(relativeX, 0f, relativeZ)
+                    val targetWorldPoint = centerPose.transformPoint(localOffset)
+                    val targetPose = Pose(targetWorldPoint, multiplyQuaternions(centerPose.rotationQuaternion, qRot))
                     val newAnchor = session.createAnchor(targetPose)
                     if (newAnchor != null) {
                       spawnedList.add(
@@ -639,10 +698,10 @@ fun ArScreen(
               val h = effectiveHeightCm / 100f * calibrationFactor
               val d = effectiveDepthCm / 100f * calibrationFactor
               val ghostInstance = rememberModelInstance(modelLoader, "models/$effectiveModelName")
-              LaunchedEffect(ghostInstance) {
+              LaunchedEffect(ghostInstance, ambientColorCorrection) {
                 ghostInstance?.let { mi ->
                   mi.materialInstances.forEach { mat ->
-                    try { mat.setParameter("baseColorFactor", 0.3f, 0.3f, 0.3f, 0.3f) } catch (_: Exception) {}
+                    try { mat.setParameter("baseColorFactor", 0.3f * ambientColorCorrection[0], 0.3f * ambientColorCorrection[1], 0.3f * ambientColorCorrection[2], 0.3f * ambientColorCorrection[3]) } catch (_: Exception) {}
                   }
                 }
               }
@@ -684,11 +743,11 @@ fun ArScreen(
                   }
                 }
 
-                LaunchedEffect(item.opacity, modelInstance) {
+                LaunchedEffect(item.opacity, modelInstance, ambientColorCorrection) {
                   modelInstance?.let { mi ->
                     mi.materialInstances.forEach { mat ->
                       try {
-                        mat.setParameter("baseColorFactor", item.opacity, item.opacity, item.opacity, item.opacity)
+                        mat.setParameter("baseColorFactor", item.opacity * ambientColorCorrection[0], item.opacity * ambientColorCorrection[1], item.opacity * ambientColorCorrection[2], item.opacity * ambientColorCorrection[3])
                       } catch (_: Exception) {}
                     }
                     try {
@@ -863,6 +922,7 @@ fun ArScreenContent(
   modifier: Modifier = Modifier,
   arSceneViewContent: @Composable BoxScope.() -> Unit = {}
 ) {
+  val context = LocalContext.current
   var viewportWidth by remember { mutableStateOf(0) }
   var viewportHeight by remember { mutableStateOf(0) }
   var showOnboarding by remember { mutableStateOf(true) }
@@ -1371,14 +1431,46 @@ fun ArScreenContent(
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically
             ) {
-              Column {
+              Column(modifier = Modifier.weight(1f)) {
                 Text("📏 자 모드", style = MaterialTheme.typography.titleSmall)
                 if (measuredDistanceCm > 0f) {
-                  Text(
-                    text = "측정 거리: ${"%.1f".format(measuredDistanceCm)} cm",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                  )
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                      text = "측정 거리: ${"%.1f".format(measuredDistanceCm)} cm",
+                      style = MaterialTheme.typography.bodyMedium,
+                      color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    // R4. Clipboard Copy Button
+                    IconButton(
+                      onClick = {
+                        val textToCopy = "[FitCheck AR] 측정 공간 거리: ${"%.1f".format(measuredDistanceCm)} cm"
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("FitCheck AR Distance", textToCopy)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "측정 거리가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+                      },
+                      modifier = Modifier.size(24.dp)
+                    ) {
+                      Text("📋", fontSize = 14.sp)
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    // R4. External Share Intent Button
+                    IconButton(
+                      onClick = {
+                        val textToShare = "[FitCheck AR] 인테리어 가구 배치용 측정 거리: ${"%.1f".format(measuredDistanceCm)} cm"
+                        val sendIntent = Intent().apply {
+                          action = Intent.ACTION_SEND
+                          putExtra(Intent.EXTRA_TEXT, textToShare)
+                          type = "text/plain"
+                        }
+                        context.startActivity(Intent.createChooser(sendIntent, "측정 거리 공유"))
+                      },
+                      modifier = Modifier.size(24.dp)
+                    ) {
+                      Text("🔗", fontSize = 14.sp)
+                    }
+                  }
                 } else {
                   Text("바닥을 두 번 탭하세요", style = MaterialTheme.typography.bodySmall)
                 }
@@ -1462,13 +1554,35 @@ fun ArScreenContent(
                 )
               }
               Spacer(modifier = Modifier.height(6.dp))
+              var selectedCategory by remember { mutableStateOf("전체") }
+              val categories = listOf("전체", "주방", "다용도실", "침실/거실", "기타")
+
+              Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                categories.forEach { category ->
+                  FilterChip(
+                    selected = selectedCategory == category,
+                    onClick = { selectedCategory = category },
+                    label = { Text(category) }
+                  )
+                }
+              }
+
+              Spacer(modifier = Modifier.height(6.dp))
+
+              val filteredFurniture = remember(recommendedFurniture, selectedCategory) {
+                if (selectedCategory == "전체") recommendedFurniture else recommendedFurniture.filter { getPresetCategory(it.name) == selectedCategory }
+              }
+
               Row(
                 modifier = Modifier
                   .horizontalScroll(rememberScrollState())
                   .fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
               ) {
-                recommendedFurniture.forEach { furniture ->
+                filteredFurniture.forEach { furniture ->
                   ElevatedButton(
                     onClick = {
                       onSelectRecommended(furniture)
@@ -1491,8 +1605,8 @@ fun ArScreenContent(
                     }
                   }
                 }
-                if (recommendedFurniture.isEmpty()) {
-                  Text("해당 공간에 맞는 가구가 없습니다", style = MaterialTheme.typography.bodySmall)
+                if (filteredFurniture.isEmpty()) {
+                  Text("해당 조건에 맞는 가구가 없습니다", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(8.dp))
                 }
               }
             }
@@ -1777,5 +1891,14 @@ private fun multiplyQuaternions(q1: FloatArray, q2: FloatArray): FloatArray {
     x1 * y2 - y1 * x2 + z1 * w2 + w1 * z2,
     -x1 * x2 - y1 * y2 - z1 * z2 + w1 * w2
   )
+}
+
+fun getPresetCategory(name: String): String {
+  return when {
+    name.contains("냉장고") || name.contains("식기세척기") -> "주방"
+    name.contains("세탁기") -> "다용도실"
+    name.contains("옷장") || name.contains("침대") || name.contains("소파") || name.contains("식탁") -> "침실/거실"
+    else -> "기타"
+  }
 }
 

@@ -1,0 +1,24 @@
+<resources>
+    <string name="app_name">FitCheck AR</string>
+    <string name="title_placement">📐 Fitting</string>
+    <string name="title_my_room">🏠 My Rooms</string>
+    <string name="title_gallery">🖼 Gallery</string>
+    <string name="save_preset_button">Save to My List</string>
+    <string name="ar_camera_button">View in AR Camera</string>
+    <string name="calibration_title">Scale Calibration (Optional)</string>
+    <string name="calibration_desc">If AR model dimensions feel off, adjust the scale factor (1.0 = default, 0.9 = 10% smaller, 1.1 = 10% larger).</string>
+    <string name="ar_support_error">This device does not support ARCore. AR feature is unavailable.</string>
+    <string name="camera_permission_required">Camera permission is required to launch AR fitting.</string>
+    
+    <string name="room_preset_desc">Register room size presets to quickly check matching recommended items in the AR view.</string>
+    <string name="add_new_room">🏠 Add New Room</string>
+    <string name="room_name_label">Room Name (e.g. Living Room, Bedroom)</string>
+    <string name="save_room_preset">Save Room Preset</string>
+    <string name="saved_rooms">Saved Rooms List</string>
+    <string name="no_saved_rooms">No registered rooms. Add one using the form above.</string>
+    
+    <string name="ruler_mode_title">📏 Ruler Mode</string>
+    <string name="ruler_mode_clear">Clear Ruler</string>
+    <string name="ruler_mode_tip">Double-tap floor to measure</string>
+    <string name="ar_limit_warning">For stability, you can place a maximum of 8 items.</string>
+</resources>

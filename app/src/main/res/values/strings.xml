@@ -1,3 +1,24 @@
 <resources>
-    <string name="app_name">InteriorCamera</string>
+    <string name="app_name">FitCheck AR</string>
+    <string name="title_placement">📐 배치</string>
+    <string name="title_my_room">🏠 나의 방</string>
+    <string name="title_gallery">🖼 갤러리</string>
+    <string name="save_preset_button">Save to My List</string>
+    <string name="ar_camera_button">AR 카메라로 확인하기</string>
+    <string name="calibration_title">크기 보정 (선택사항)</string>
+    <string name="calibration_desc">AR 크기가 실제와 다르다면 보정값을 조정하세요. (1.0 = 기본, 0.9 = 10% 작게, 1.1 = 10% 크게)</string>
+    <string name="ar_support_error">이 기기는 ARCore를 지원하지 않아 AR 기능을 실행할 수 없습니다.</string>
+    <string name="camera_permission_required">AR 기능을 실행하려면 카메라 권한이 필요합니다.</string>
+    
+    <string name="room_preset_desc">자주 측정하는 방의 규격을 등록해두면, 가구 피팅 화면에서 방 사이즈에 맞는 추천 상품을 더 빨리 확인할 수 있습니다.</string>
+    <string name="add_new_room">🏠 새 방 크기 추가</string>
+    <string name="room_name_label">방 이름 (예: 안방, 거실, 서재)</string>
+    <string name="save_room_preset">방 크기 저장</string>
+    <string name="saved_rooms">저장된 방 목록</string>
+    <string name="no_saved_rooms">등록된 방이 없습니다. 위 양식에서 방을 추가해보세요.</string>
+    
+    <string name="ruler_mode_title">📏 자 모드</string>
+    <string name="ruler_mode_clear">자 지우기</string>
+    <string name="ruler_mode_tip">바닥을 두 번 탭하세요</string>
+    <string name="ar_limit_warning">안정적인 실행을 위해 가구는 최대 8개까지 배치할 수 있습니다.</string>
 </resources>
