@@ -47,13 +47,49 @@ object FloorplanAutoLayout {
         }.toMutableList()
 
         // 4. Iteratively resolve overlaps
+        resolveOverlaps(snappedAndClamped, roomWidthCm, roomDepthCm)
+
+        // 5. Final wall-snapping and room-bounds clamping pass
+        val finalSnapped = snappedAndClamped.map { item ->
+            val snappedPos = snapToWalls(
+                item.offsetX,
+                item.offsetZ,
+                item.rotationDegrees,
+                item.widthCm,
+                item.depthCm,
+                roomWidthCm,
+                roomDepthCm
+            )
+            val clamped = FloorplanCoordinator.clampToRoomBounds(
+                offsetX = snappedPos.first,
+                offsetZ = snappedPos.second,
+                rotationDegrees = item.rotationDegrees,
+                blockWidthCm = item.widthCm,
+                blockDepthCm = item.depthCm,
+                roomWidthCm = roomWidthCm,
+                roomDepthCm = roomDepthCm
+            )
+            item.copy(offsetX = clamped.first, offsetZ = clamped.second)
+        }.toMutableList()
+
+        // 6. Secondary overlap resolution pass
+        resolveOverlaps(finalSnapped, roomWidthCm, roomDepthCm)
+
+        return finalSnapped
+    }
+
+    private fun resolveOverlaps(
+        items: MutableList<ArPlacedItem>,
+        roomWidthCm: Float,
+        roomDepthCm: Float
+    ) {
         val maxIterations = 25
         for (iter in 0 until maxIterations) {
             var collisionFound = false
-            for (i in snappedAndClamped.indices) {
-                for (j in i + 1 until snappedAndClamped.size) {
-                    val itemI = snappedAndClamped[i]
-                    val itemJ = snappedAndClamped[j]
+            for (i in items.indices) {
+                for (j in i + 1 until items.size) {
+                    val itemI = items[i]
+                    val itemJ = items[j]
                     val obbI = toObb(itemI)
                     val obbJ = toObb(itemJ)
                     val result = CollisionDetection.checkCollision(obbI, obbJ)
@@ -74,7 +110,7 @@ object FloorplanAutoLayout {
                             roomWidthCm = roomWidthCm,
                             roomDepthCm = roomDepthCm
                         )
-                        snappedAndClamped[i] = nextI.copy(offsetX = clampedI.first, offsetZ = clampedI.second)
+                        items[i] = nextI.copy(offsetX = clampedI.first, offsetZ = clampedI.second)
 
                         val nextJ = itemJ.copy(offsetX = itemJ.offsetX - dx, offsetZ = itemJ.offsetZ - dz)
                         val clampedJ = FloorplanCoordinator.clampToRoomBounds(
@@ -86,34 +122,11 @@ object FloorplanAutoLayout {
                             roomWidthCm = roomWidthCm,
                             roomDepthCm = roomDepthCm
                         )
-                        snappedAndClamped[j] = nextJ.copy(offsetX = clampedJ.first, offsetZ = clampedJ.second)
+                        items[j] = nextJ.copy(offsetX = clampedJ.first, offsetZ = clampedJ.second)
                     }
                 }
             }
             if (!collisionFound) break
-        }
-
-        // 5. Final wall-snapping and room-bounds clamping pass
-        return snappedAndClamped.map { item ->
-            val snappedPos = snapToWalls(
-                item.offsetX,
-                item.offsetZ,
-                item.rotationDegrees,
-                item.widthCm,
-                item.depthCm,
-                roomWidthCm,
-                roomDepthCm
-            )
-            val clamped = FloorplanCoordinator.clampToRoomBounds(
-                offsetX = snappedPos.first,
-                offsetZ = snappedPos.second,
-                rotationDegrees = item.rotationDegrees,
-                blockWidthCm = item.widthCm,
-                blockDepthCm = item.depthCm,
-                roomWidthCm = roomWidthCm,
-                roomDepthCm = roomDepthCm
-            )
-            item.copy(offsetX = clamped.first, offsetZ = clamped.second)
         }
     }
 

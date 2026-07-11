@@ -612,4 +612,74 @@ class FloorplanAutoLayoutTest {
             assertTrue("Rotation $rot must be snap to multiples of 90", rot == 0f || rot == 90f || rot == 180f || rot == 270f)
         }
     }
+
+    @Test
+    fun testNameUniquenessAfterDeletion() {
+        var placedItems = emptyList<ArPlacedItem>()
+        val itemProto = ArPlacedItem("소파 (IKEA)", 160f, 85f, 90f, "cube.glb", 0f, 0f, 0f)
+
+        fun addFurniture(baseItem: ArPlacedItem) {
+            val baseName = baseItem.name
+            val uniqueName = if (placedItems.none { it.name == baseName }) {
+                baseName
+            } else {
+                var suffix = 2
+                while (placedItems.any { it.name == "$baseName ($suffix)" }) {
+                    suffix++
+                }
+                "$baseName ($suffix)"
+            }
+            placedItems = placedItems + baseItem.copy(name = uniqueName)
+        }
+
+        addFurniture(itemProto)
+        addFurniture(itemProto)
+        addFurniture(itemProto)
+
+        assertEquals("소파 (IKEA)", placedItems[0].name)
+        assertEquals("소파 (IKEA) (2)", placedItems[1].name)
+        assertEquals("소파 (IKEA) (3)", placedItems[2].name)
+
+        placedItems = placedItems.filter { it.name != "소파 (IKEA) (2)" }
+        assertEquals(2, placedItems.size)
+
+        addFurniture(itemProto)
+        assertEquals(3, placedItems.size)
+        val newNames = placedItems.map { it.name }
+        assertTrue(newNames.contains("소파 (IKEA)"))
+        assertTrue(newNames.contains("소파 (IKEA) (2)"))
+        assertTrue(newNames.contains("소파 (IKEA) (3)"))
+    }
+
+    @Test
+    fun testWallSnappingDoesNotReintroduceOverlaps() {
+        val item1 = ArPlacedItem(
+            name = "Item 1",
+            widthCm = 100f,
+            heightCm = 100f,
+            depthCm = 100f,
+            modelName = "cube.glb",
+            offsetX = 0.74f,
+            offsetZ = 0.49f,
+            rotationDegrees = 0f
+        )
+        val item2 = ArPlacedItem(
+            name = "Item 2",
+            widthCm = 100f,
+            heightCm = 100f,
+            depthCm = 100f,
+            modelName = "cube.glb",
+            offsetX = 0.49f,
+            offsetZ = 0.74f,
+            rotationDegrees = 0f
+        )
+
+        val aligned = FloorplanAutoLayout.align(listOf(item1, item2), 300f, 300f)
+
+        assertEquals(2, aligned.size)
+        val obb1 = toObb(aligned[0])
+        val obb2 = toObb(aligned[1])
+        val collision = CollisionDetection.checkCollision(obb1, obb2)
+        assertFalse("Wall snapping should not re-introduce overlaps", collision.collides)
+    }
 }

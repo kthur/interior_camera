@@ -44,6 +44,7 @@ import com.google.ar.core.Config
 import com.google.ar.core.Frame
 import com.google.ar.core.HitResult
 import com.google.ar.core.Plane
+import com.google.ar.core.Point
 import com.google.ar.core.Pose
 import com.google.ar.core.TrackingState
 import com.google.ar.core.LightEstimate
@@ -89,19 +90,34 @@ sealed interface ArAction {
   data class Opacity(val itemId: String, val oldVal: Float, val newVal: Float) : ArAction
 }
 
+private fun isMeasurableTrackable(trackable: com.google.ar.core.Trackable?): Boolean {
+  return trackable is Plane || trackable is Point ||
+    trackable?.javaClass?.simpleName == "DepthPoint"
+}
+
 private fun selectBestHit(hitResults: List<HitResult>?): HitResult? {
   if (hitResults.isNullOrEmpty()) return null
   return hitResults
     .filter { it.distance < MAX_HIT_DISTANCE_M }
-    .filter { it.trackable is Plane }
+    .filter { isMeasurableTrackable(it.trackable) }
     .minByOrNull {
-      val planePref = when ((it.trackable as? Plane)?.type) {
-        Plane.Type.HORIZONTAL_UPWARD_FACING -> 0
-        Plane.Type.VERTICAL -> 1
-        else -> 2
+      val pref = when {
+        it.trackable is Plane -> when ((it.trackable as? Plane)?.type) {
+          Plane.Type.HORIZONTAL_UPWARD_FACING -> 0
+          Plane.Type.VERTICAL -> 1
+          else -> 2
+        }
+        it.trackable is Point -> 4
+        else -> 5 // DepthPoint or other depth-based trackable
       }
-      planePref * 10000 + (it.distance * 100).toInt()
+      pref * 10000 + (it.distance * 100).toInt()
     }
+}
+
+// depth 포함 히트 테스트: 평면/특징점 모두 허용 → 자 모드에서 어떤 표면에서도 측정 가능
+private fun hitTestForRuler(frame: com.google.ar.core.Frame?, x: Float, y: Float): List<HitResult>? {
+  if (frame == null) return null
+  return frame.hitTest(x, y)
 }
 
 @Composable
@@ -649,7 +665,7 @@ fun ArScreen(
           onGestureListener = rememberOnGestureListener(
             onSingleTapConfirmed = { motionEvent: MotionEvent, node: Node? ->
               if (isRulerMode) {
-                val hitResults = frame?.hitTest(motionEvent.x, motionEvent.y)
+                val hitResults = hitTestForRuler(frame, motionEvent.x, motionEvent.y)
                 val bestHit = selectBestHit(hitResults)
                 if (bestHit != null) {
                   if (rulerPointA == null) {

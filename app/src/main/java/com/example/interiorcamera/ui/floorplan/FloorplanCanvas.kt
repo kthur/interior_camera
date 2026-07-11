@@ -190,7 +190,7 @@ fun FloorplanCanvas(
                             )
 
                             // R3. Implement Snapping boundaries logic (10cm snap threshold)
-                            val snapThreshold = 10f
+                            val snapThreshold = 0.10f
                             var targetX = relX
                             var targetZ = relZ
                             var activeVert: Float? = null

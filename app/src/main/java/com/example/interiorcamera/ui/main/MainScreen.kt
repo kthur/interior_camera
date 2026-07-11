@@ -902,8 +902,16 @@ fun FloorplanEditorDialog(
           availableFurniture.forEach { item ->
             ElevatedCard(
               onClick = {
-                val count = placedItems.count { it.name.startsWith(item.name) }
-                val uniqueName = if (count > 0) "${item.name} (${count + 1})" else item.name
+                val baseName = item.name
+                val uniqueName = if (placedItems.none { it.name == baseName }) {
+                    baseName
+                } else {
+                    var suffix = 2
+                    while (placedItems.any { it.name == "$baseName ($suffix)" }) {
+                        suffix++
+                    }
+                    "$baseName ($suffix)"
+                }
                 placedItems = placedItems + item.copy(name = uniqueName)
               },
               modifier = Modifier.width(120.dp)
