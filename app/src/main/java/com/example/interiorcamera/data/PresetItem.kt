@@ -8,5 +8,6 @@ data class PresetItem(
   val height: Float,
   val depth: Float,
   val modelName: String = "cube.glb",
-  val id: String = java.util.UUID.randomUUID().toString()
+  val id: String = java.util.UUID.randomUUID().toString(),
+  val isFavorite: Boolean = false
 )

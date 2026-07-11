@@ -60,6 +60,14 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
     }
   }
 
+  fun togglePresetFavorite(presetId: String) {
+    viewModelScope.launch {
+      try {
+        dataRepository.togglePresetFavorite(presetId)
+      } catch (_: Exception) {}
+    }
+  }
+
   companion object {
     val Factory: ViewModelProvider.Factory = viewModelFactory {
       initializer {

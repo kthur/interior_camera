@@ -134,6 +134,7 @@ fun ArScreen(
   var actionHistory by remember { mutableStateOf(listOf<ArAction>()) }
   var redoStack by remember { mutableStateOf(listOf<ArAction>()) }
   var captureRequested by remember { mutableStateOf(false) }
+  var isOcclusionEnabled by remember { mutableStateOf(false) }
   var selectedModelIndex by remember { mutableStateOf(-1) }
   var hasVerticalPlane by remember { mutableStateOf(false) }
 
@@ -329,6 +330,8 @@ fun ArScreen(
   }
 
   ArScreenContent(
+    isOcclusionEnabled = isOcclusionEnabled,
+    onOcclusionToggle = { isOcclusionEnabled = it },
     widthCm = effectiveWidthCm,
     heightCm = effectiveHeightCm,
     depthCm = effectiveDepthCm,
@@ -578,10 +581,11 @@ fun ArScreen(
           },
           onSessionUpdated = { session, updatedFrame ->
             arSession = session
-            if (!depthConfigured) {
+            val targetDepthMode = if (isOcclusionEnabled) Config.DepthMode.AUTOMATIC else Config.DepthMode.DISABLED
+            if (!depthConfigured || session.config.depthMode != targetDepthMode) {
               try {
                 session.configure(session.config.apply {
-                  depthMode = Config.DepthMode.AUTOMATIC
+                  depthMode = targetDepthMode
                   lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
                 })
               } catch (_: Exception) { }
@@ -919,6 +923,8 @@ fun ArScreenContent(
   onClearRuler: () -> Unit = {},
   onCalibrationFactorChange: (Float) -> Unit = {},
   onSelectRecommended: (RecommendedFurniture) -> Unit = {},
+  isOcclusionEnabled: Boolean = false,
+  onOcclusionToggle: (Boolean) -> Unit = {},
   modifier: Modifier = Modifier,
   arSceneViewContent: @Composable BoxScope.() -> Unit = {}
 ) {
@@ -1523,6 +1529,19 @@ fun ArScreenContent(
                 Text("80%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("100%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("120%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              }
+              Spacer(modifier = Modifier.height(8.dp))
+              HorizontalDivider()
+              Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Text("👤 실제 장애물 가림 효과 (Occlusion)", style = MaterialTheme.typography.labelMedium)
+                Switch(
+                  checked = isOcclusionEnabled,
+                  onCheckedChange = onOcclusionToggle
+                )
               }
             }
           }

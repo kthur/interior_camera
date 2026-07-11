@@ -2,25 +2,27 @@ package com.example.interiorcamera.ui.floorplan
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.font.FontWeight
+import kotlin.math.abs
 
 @Composable
 fun FloorplanCanvas(
@@ -33,18 +35,20 @@ fun FloorplanCanvas(
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
-    var canvasWidth by remember { mutableStateOf(600f) }
-    var canvasHeight by remember { mutableStateOf(600f) }
+    var canvasWidth by remember { mutableStateOf(0f) }
+    var canvasHeight by remember { mutableStateOf(0f) }
+
+    // R3. Guideline offsets state variables (in Relative cm coordinates)
+    var snapHorizontalGuide by remember { mutableStateOf<Float?>(null) }
+    var snapVerticalGuide by remember { mutableStateOf<Float?>(null) }
 
     Box(
         modifier = modifier
-            .fillMaxWidth()
-            .height(280.dp)
-            .background(Color(0xFFFAFAFA))
-            .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
-            .onGloballyPositioned { coordinates ->
-                canvasWidth = coordinates.size.width.toFloat()
-                canvasHeight = coordinates.size.height.toFloat()
+            .fillMaxSize()
+            .background(Color.White)
+            .onGloballyPositioned { coords ->
+                canvasWidth = coords.size.width.toFloat()
+                canvasHeight = coords.size.height.toFloat()
             }
             .pointerInput(Unit) {
                 detectTapGestures {
@@ -53,23 +57,53 @@ fun FloorplanCanvas(
             }
             .testTag("FloorplanCanvas")
     ) {
-        // Draw grid
+        // Draw grid and snapping dashed guide lines
         Canvas(modifier = Modifier.fillMaxSize()) {
             val gridSpacing = 40f
+            // Normal grid
             for (y in 0 until (size.height / gridSpacing).toInt()) {
                 drawLine(
-                    color = Color.LightGray.copy(alpha = 0.4f),
-                    start = Offset(0f, y * gridSpacing),
-                    end = Offset(size.width, y * gridSpacing),
+                    color = Color.LightGray.copy(alpha = 0.3f),
+                    start = androidx.compose.ui.geometry.Offset(0f, y * gridSpacing),
+                    end = androidx.compose.ui.geometry.Offset(size.width, y * gridSpacing),
                     strokeWidth = 1f
                 )
             }
             for (x in 0 until (size.width / gridSpacing).toInt()) {
                 drawLine(
-                    color = Color.LightGray.copy(alpha = 0.4f),
-                    start = Offset(x * gridSpacing, 0f),
-                    end = Offset(x * gridSpacing, size.height),
+                    color = Color.LightGray.copy(alpha = 0.3f),
+                    start = androidx.compose.ui.geometry.Offset(x * gridSpacing, 0f),
+                    end = androidx.compose.ui.geometry.Offset(x * gridSpacing, size.height),
                     strokeWidth = 1f
+                )
+            }
+
+            // R3. Draw dashed cyan/magenta alignment guide lines if snapping is active
+            val dashEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 10f), 0f)
+
+            snapVerticalGuide?.let { relX ->
+                val (screenX, _) = FloorplanCoordinator.relativeToScreen(
+                    relX, 0f, size.width, size.height, roomWidthCm, roomDepthCm
+                )
+                drawLine(
+                    color = Color(0xFF00BCD4), // Cyan guide
+                    start = androidx.compose.ui.geometry.Offset(screenX, 0f),
+                    end = androidx.compose.ui.geometry.Offset(screenX, size.height),
+                    strokeWidth = 3f,
+                    pathEffect = dashEffect
+                )
+            }
+
+            snapHorizontalGuide?.let { relZ ->
+                val (_, screenY) = FloorplanCoordinator.relativeToScreen(
+                    0f, relZ, size.width, size.height, roomWidthCm, roomDepthCm
+                )
+                drawLine(
+                    color = Color(0xFFE91E63), // Pink/Magenta guide
+                    start = androidx.compose.ui.geometry.Offset(0f, screenY),
+                    end = androidx.compose.ui.geometry.Offset(size.width, screenY),
+                    strokeWidth = 3f,
+                    pathEffect = dashEffect
                 )
             }
         }
@@ -95,7 +129,6 @@ fun FloorplanCanvas(
             val currentCanvasWidth by rememberUpdatedState(canvasWidth)
             val currentCanvasHeight by rememberUpdatedState(canvasHeight)
 
-            // Convert to density independent positioning safely
             Box(
                 modifier = Modifier
                     .offset(
@@ -124,7 +157,17 @@ fun FloorplanCanvas(
                         }
                     }
                     .pointerInput(item.name) {
-                        detectDragGestures { change, dragAmount ->
+                        detectDragGestures(
+                            onDragEnd = {
+                                // Clear visual guidelines on drag release
+                                snapHorizontalGuide = null
+                                snapVerticalGuide = null
+                            },
+                            onDragCancel = {
+                                snapHorizontalGuide = null
+                                snapVerticalGuide = null
+                            }
+                        ) { change, dragAmount ->
                             change.consume()
                             val latestItem = currentPlacedItems.find { it.name == item.name } ?: item
                             val (currScreenX, currScreenY) = FloorplanCoordinator.relativeToScreen(
@@ -145,9 +188,42 @@ fun FloorplanCanvas(
                                 currentRoomWidth,
                                 currentRoomDepth
                             )
+
+                            // R3. Implement Snapping boundaries logic (10cm snap threshold)
+                            val snapThreshold = 10f
+                            var targetX = relX
+                            var targetZ = relZ
+                            var activeVert: Float? = null
+                            var activeHoriz: Float? = null
+
+                            // 1) Snap to Room Center
+                            if (abs(relX) < snapThreshold) {
+                                targetX = 0f
+                                activeVert = 0f
+                            }
+                            if (abs(relZ) < snapThreshold) {
+                                targetZ = 0f
+                                activeHoriz = 0f
+                            }
+
+                            // 2) Snap to other items' coordinates to facilitate neat row alignment
+                            currentPlacedItems.filter { it.name != item.name }.forEach { other ->
+                                if (abs(relX - other.offsetX) < snapThreshold) {
+                                    targetX = other.offsetX
+                                    activeVert = other.offsetX
+                                }
+                                if (abs(relZ - other.offsetZ) < snapThreshold) {
+                                    targetZ = other.offsetZ
+                                    activeHoriz = other.offsetZ
+                                }
+                            }
+
+                            snapVerticalGuide = activeVert
+                            snapHorizontalGuide = activeHoriz
+
                             val (clampedX, clampedZ) = FloorplanCoordinator.clampToRoomBounds(
-                                relX,
-                                relZ,
+                                targetX,
+                                targetZ,
                                 latestItem.rotationDegrees,
                                 latestItem.widthCm,
                                 latestItem.depthCm,

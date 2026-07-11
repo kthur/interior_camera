@@ -36,6 +36,7 @@ import com.example.interiorcamera.ArItem
 import com.example.interiorcamera.ArView
 import com.example.interiorcamera.data.PresetItem
 import com.example.interiorcamera.data.RoomPreset
+import com.example.interiorcamera.data.LayoutSharing
 import com.example.interiorcamera.theme.InteriorCameraTheme
 import com.example.interiorcamera.ui.gallery.GalleryScreen
 import com.example.interiorcamera.ui.floorplan.FloorplanCanvas
@@ -72,6 +73,7 @@ fun MainScreen(
     onItemClick = onItemClick,
     onSavePreset = { viewModel.savePreset(it) },
     onDeletePreset = { viewModel.deletePreset(it) },
+    onTogglePresetFavorite = { viewModel.togglePresetFavorite(it) },
     onSaveRoomPreset = { viewModel.saveRoomPreset(it) },
     onDeleteRoomPreset = { viewModel.deleteRoomPreset(it) },
     modifier = modifier
@@ -84,6 +86,7 @@ fun MainScreenContent(
   onItemClick: (NavKey) -> Unit,
   onSavePreset: (PresetItem) -> Unit,
   onDeletePreset: (String) -> Unit,
+  onTogglePresetFavorite: (String) -> Unit,
   onSaveRoomPreset: (RoomPreset) -> Unit,
   onDeleteRoomPreset: (String) -> Unit,
   modifier: Modifier = Modifier
@@ -102,6 +105,7 @@ fun MainScreenContent(
   var roomName by remember { mutableStateOf("") }
   var roomWidthStr by remember { mutableStateOf("300") }
   var roomDepthStr by remember { mutableStateOf("350") }
+  var roomImportCode by remember { mutableStateOf("") }
 
   var activeFloorplanRoom by remember { mutableStateOf<RoomPreset?>(null) }
 
@@ -246,8 +250,16 @@ fun MainScreenContent(
 
           if (uiState is MainScreenUiState.Success) {
             val customPresets = uiState.presets
-            val filteredCustomPresets = remember(customPresets, selectedCategory) {
-              if (selectedCategory == "전체") customPresets else customPresets.filter { getPresetCategory(it.name) == selectedCategory }
+            // R1. Favorites sorted first
+            val sortedCustomPresets = remember(customPresets) {
+              customPresets.sortedWith(
+                compareByDescending<PresetItem> { it.isFavorite }
+                  .thenBy { it.name }
+              )
+            }
+
+            val filteredCustomPresets = remember(sortedCustomPresets, selectedCategory) {
+              if (selectedCategory == "전체") sortedCustomPresets else sortedCustomPresets.filter { getPresetCategory(it.name) == selectedCategory }
             }
 
             if (filteredCustomPresets.isNotEmpty()) {
@@ -273,7 +285,7 @@ fun MainScreenContent(
                           heightStr == preset.height.toString() &&
                           depthStr == preset.depth.toString()
                       
-                      // R1. Trailing delete icon added on Custom Preset chips
+                      // R1. Star favorite trigger icon and Trailing delete icon added on Custom Preset chips
                       FilterChip(
                         selected = isSelected,
                         onClick = {
@@ -286,11 +298,20 @@ fun MainScreenContent(
                         },
                         label = { Text(preset.name) },
                         trailingIcon = {
-                          IconButton(
-                            onClick = { onDeletePreset(preset.id) },
-                            modifier = Modifier.size(18.dp)
-                          ) {
-                            Text("❌", fontSize = 9.sp, color = Color.Red)
+                          Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                              onClick = { onTogglePresetFavorite(preset.id) },
+                              modifier = Modifier.size(20.dp)
+                            ) {
+                              Text(if (preset.isFavorite) "⭐" else "☆", fontSize = 10.sp)
+                            }
+                            Spacer(modifier = Modifier.width(2.dp))
+                            IconButton(
+                              onClick = { onDeletePreset(preset.id) },
+                              modifier = Modifier.size(16.dp)
+                            ) {
+                              Text("❌", fontSize = 8.sp, color = Color.Red)
+                            }
                           }
                         },
                         modifier = Modifier.weight(1f)
@@ -510,6 +531,15 @@ fun MainScreenContent(
                 )
               }
 
+              // R2. Import Layout code text field
+              OutlinedTextField(
+                value = roomImportCode,
+                onValueChange = { roomImportCode = it },
+                label = { Text("공유받은 도면 코드 붙여넣기 (선택)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+              )
+
               val roomWidth = roomWidthStr.toFloatOrNull() ?: 0f
               val roomDepth = roomDepthStr.toFloatOrNull() ?: 0f
               val isRoomValid = roomName.isNotBlank() && roomWidth > 0f && roomDepth > 0f
@@ -517,16 +547,19 @@ fun MainScreenContent(
               Button(
                 onClick = {
                   if (isRoomValid) {
+                    val importedItems = if (roomImportCode.isNotBlank()) LayoutSharing.importFromCode(roomImportCode) else emptyList()
                     onSaveRoomPreset(
                       RoomPreset(
                         id = UUID.randomUUID().toString(),
                         name = roomName.trim(),
                         widthCm = roomWidth,
                         depthCm = roomDepth,
-                        timestamp = System.currentTimeMillis()
+                        timestamp = System.currentTimeMillis(),
+                        items = importedItems
                       )
                     )
                     roomName = ""
+                    roomImportCode = ""
                   }
                 },
                 enabled = isRoomValid,
@@ -756,11 +789,29 @@ fun FloorplanEditorDialog(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
           )
-          Button(
-            onClick = { onSave(placedItems) },
-            shape = RoundedCornerShape(8.dp)
-          ) {
-            Text("도면 저장")
+          
+          Row {
+            // R2. Copy layout code button
+            OutlinedButton(
+              onClick = {
+                val code = LayoutSharing.exportToCode(placedItems)
+                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("FitCheck Layout Code", code)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(context, "도면 공유 코드가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+              },
+              shape = RoundedCornerShape(8.dp),
+              modifier = Modifier.padding(end = 8.dp)
+            ) {
+              Text("공유 코드 복사", fontSize = 11.sp)
+            }
+            
+            Button(
+              onClick = { onSave(placedItems) },
+              shape = RoundedCornerShape(8.dp)
+            ) {
+              Text("도면 저장")
+            }
           }
         }
 
@@ -882,6 +933,7 @@ fun MainScreenPreview() {
       onItemClick = {},
       onSavePreset = {},
       onDeletePreset = {},
+      onTogglePresetFavorite = {},
       onSaveRoomPreset = {},
       onDeleteRoomPreset = {}
     )

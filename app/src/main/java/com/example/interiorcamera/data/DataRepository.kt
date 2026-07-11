@@ -13,6 +13,7 @@ interface DataRepository {
   val roomPresets: Flow<List<RoomPreset>>
   suspend fun savePreset(preset: PresetItem)
   suspend fun deletePreset(presetId: String)
+  suspend fun togglePresetFavorite(presetId: String)
   suspend fun saveRoomPreset(preset: RoomPreset)
   suspend fun deleteRoomPreset(presetId: String)
 }
@@ -44,7 +45,8 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
           val height = obj.getDouble("height").toFloat()
           val depth = obj.getDouble("depth").toFloat()
           val modelName = obj.optString("modelName", "cube.glb")
-          list.add(PresetItem(name = name, width = width, height = height, depth = depth, modelName = modelName, id = id))
+          val isFavorite = obj.optBoolean("isFavorite", false)
+          list.add(PresetItem(name = name, width = width, height = height, depth = depth, modelName = modelName, id = id, isFavorite = isFavorite))
         }
         _data.value = list
       } catch (e: Exception) {
@@ -68,7 +70,12 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     savePresetsToSharedPrefs(currentList)
   }
-
+  override suspend fun togglePresetFavorite(presetId: String) {
+    val currentList = _data.value.map {
+      if (it.id == presetId) it.copy(isFavorite = !it.isFavorite) else it
+    }
+    savePresetsToSharedPrefs(currentList)
+  }
   private fun savePresetsToSharedPrefs(list: List<PresetItem>) {
     val jsonArray = JSONArray()
     for (item in list) {
@@ -79,6 +86,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
       obj.put("height", item.height.toDouble())
       obj.put("depth", item.depth.toDouble())
       obj.put("modelName", item.modelName)
+      obj.put("isFavorite", item.isFavorite)
       jsonArray.put(obj)
     }
 

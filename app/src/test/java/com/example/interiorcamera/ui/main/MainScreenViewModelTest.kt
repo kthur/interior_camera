@@ -84,6 +84,7 @@ class MainScreenViewModelTest {
       override suspend fun saveRoomPreset(preset: RoomPreset) {}
       override suspend fun deleteRoomPreset(presetId: String) {}
       override suspend fun deletePreset(presetId: String) {}
+      override suspend fun togglePresetFavorite(presetId: String) {}
     }
     val viewModel = MainScreenViewModel(errorRepository)
     val state = viewModel.uiState.first { it is MainScreenUiState.Error } as MainScreenUiState.Error
@@ -163,6 +164,12 @@ private class FakeMyModelRepository : DataRepository {
 
   override suspend fun deletePreset(presetId: String) {
     _data.value = _data.value.filter { it.id != presetId }
+  }
+
+  override suspend fun togglePresetFavorite(presetId: String) {
+    _data.value = _data.value.map {
+      if (it.id == presetId) it.copy(isFavorite = !it.isFavorite) else it
+    }
   }
 }
 
