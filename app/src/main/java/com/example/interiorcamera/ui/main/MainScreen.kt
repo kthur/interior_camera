@@ -41,6 +41,7 @@ import com.example.interiorcamera.theme.InteriorCameraTheme
 import com.example.interiorcamera.ui.gallery.GalleryScreen
 import com.example.interiorcamera.ui.floorplan.FloorplanCanvas
 import com.example.interiorcamera.ui.floorplan.ArPlacedItem
+import com.example.interiorcamera.ui.floorplan.FloorplanAutoLayout
 import com.google.ar.core.ArCoreApk
 import java.util.UUID
 
@@ -791,6 +792,16 @@ fun FloorplanEditorDialog(
           )
           
           Row {
+            OutlinedButton(
+              onClick = {
+                placedItems = FloorplanAutoLayout.align(placedItems, room.widthCm, room.depthCm)
+              },
+              shape = RoundedCornerShape(8.dp),
+              modifier = Modifier.padding(end = 8.dp)
+            ) {
+              Text("자동 정렬", fontSize = 11.sp)
+            }
+
             // R2. Copy layout code button
             OutlinedButton(
               onClick = {
