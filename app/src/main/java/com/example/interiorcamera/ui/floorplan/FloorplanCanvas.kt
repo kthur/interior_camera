@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,6 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
+import kotlin.math.sin
+import kotlin.math.cos
 
 @Composable
 fun FloorplanCanvas(
@@ -41,6 +44,10 @@ fun FloorplanCanvas(
     // R3. Guideline offsets state variables (in Relative cm coordinates)
     var snapHorizontalGuide by remember { mutableStateOf<Float?>(null) }
     var snapVerticalGuide by remember { mutableStateOf<Float?>(null) }
+
+    // State variables to track absolute canvas coordinates for rotation dragging
+    var currentAnglePointerCanvasX by remember { mutableStateOf(0f) }
+    var currentAnglePointerCanvasY by remember { mutableStateOf(0f) }
 
     Box(
         modifier = modifier
@@ -106,6 +113,38 @@ fun FloorplanCanvas(
                     pathEffect = dashEffect
                 )
             }
+
+            // Draw connection line from selected item to rotation handle
+            selectedItemName?.let { selName ->
+                placedItems.find { it.name == selName }?.let { item ->
+                    val (screenX, screenY) = FloorplanCoordinator.relativeToScreen(
+                        item.offsetX,
+                        item.offsetZ,
+                        size.width,
+                        size.height,
+                        roomWidthCm,
+                        roomDepthCm
+                    )
+                    val itemDepthPx = (item.depthCm / roomDepthCm) * size.height
+                    
+                    val rad = Math.toRadians(item.rotationDegrees.toDouble())
+                    val sinVal = sin(rad).toFloat()
+                    val cosVal = cos(rad).toFloat()
+                    val handleDistancePx = with(density) { 35.dp.toPx() }
+                    val topEdgeX = screenX + (itemDepthPx / 2f) * sinVal
+                    val topEdgeY = screenY - (itemDepthPx / 2f) * cosVal
+                    val handleScreenX = screenX + (itemDepthPx / 2f + handleDistancePx) * sinVal
+                    val handleScreenY = screenY - (itemDepthPx / 2f + handleDistancePx) * cosVal
+                    
+                    drawLine(
+                        color = Color(0xFF3F51B5), // Brand primary Indigo
+                        start = androidx.compose.ui.geometry.Offset(topEdgeX, topEdgeY),
+                        end = androidx.compose.ui.geometry.Offset(handleScreenX, handleScreenY),
+                        strokeWidth = 2f,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 5f), 0f)
+                    )
+                }
+            }
         }
 
         // Render furniture blocks
@@ -143,13 +182,13 @@ fun FloorplanCanvas(
                         rotationZ = item.rotationDegrees
                     }
                     .background(
-                        if (isSelected) Color.Red.copy(alpha = 0.3f) else Color.Blue.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(4.dp)
+                        if (isSelected) Color(0xFF3F51B5).copy(alpha = 0.2f) else Color(0xFFECEFF1).copy(alpha = 0.8f),
+                        shape = RoundedCornerShape(6.dp)
                     )
                     .border(
-                        width = if (isSelected) 2.dp else 1.dp,
-                        color = if (isSelected) Color.Red else Color.Blue,
-                        shape = RoundedCornerShape(4.dp)
+                        width = if (isSelected) 3.dp else 1.dp,
+                        color = if (isSelected) Color(0xFF3F51B5) else Color(0xFFB0BEC5),
+                        shape = RoundedCornerShape(6.dp)
                     )
                     .pointerInput(item.name) {
                         detectTapGestures {
@@ -158,6 +197,9 @@ fun FloorplanCanvas(
                     }
                     .pointerInput(item.name) {
                         detectDragGestures(
+                            onDragStart = {
+                                onSelectItem(item.name)
+                            },
                             onDragEnd = {
                                 // Clear visual guidelines on drag release
                                 snapHorizontalGuide = null
@@ -256,6 +298,97 @@ fun FloorplanCanvas(
                         fontSize = 8.sp,
                         color = Color.DarkGray,
                         maxLines = 1
+                    )
+                }
+            }
+        }
+
+        // Floating rotation handle at root level if an item is selected
+        selectedItemName?.let { selName ->
+            val item = placedItems.find { it.name == selName }
+            if (item != null) {
+                val itemWidthPx = (item.widthCm / roomWidthCm) * canvasWidth
+                val itemDepthPx = (item.depthCm / roomDepthCm) * canvasHeight
+                val (screenX, screenY) = FloorplanCoordinator.relativeToScreen(
+                    item.offsetX,
+                    item.offsetZ,
+                    canvasWidth,
+                    canvasHeight,
+                    roomWidthCm,
+                    roomDepthCm
+                )
+                val rad = Math.toRadians(item.rotationDegrees.toDouble())
+                val sinVal = sin(rad).toFloat()
+                val cosVal = cos(rad).toFloat()
+                val handleDistancePx = with(density) { 35.dp.toPx() }
+                val totalDistancePx = itemDepthPx / 2f + handleDistancePx
+                val handleScreenX = screenX + totalDistancePx * sinVal
+                val handleScreenY = screenY - totalDistancePx * cosVal
+
+                val handleSizeDp = 28.dp
+                val handleRadiusPx = with(density) { (handleSizeDp / 2f).toPx() }
+
+                Box(
+                    modifier = Modifier
+                        .offset(
+                            x = with(density) { (handleScreenX - handleRadiusPx).toDp() },
+                            y = with(density) { (handleScreenY - handleRadiusPx).toDp() }
+                        )
+                        .size(handleSizeDp)
+                        .background(Color.White, shape = CircleShape)
+                        .border(2.dp, Color(0xFF3F51B5), shape = CircleShape)
+                        .pointerInput(item.name) {
+                            detectDragGestures(
+                                onDragStart = {
+                                    val r = Math.toRadians(item.rotationDegrees.toDouble())
+                                    val s = sin(r).toFloat()
+                                    val c = cos(r).toFloat()
+                                    val totalDist = itemDepthPx / 2f + with(density) { 35.dp.toPx() }
+                                    currentAnglePointerCanvasX = screenX + totalDist * s
+                                    currentAnglePointerCanvasY = screenY - totalDist * c
+                                }
+                            ) { change, dragAmount ->
+                                change.consume()
+                                val r = Math.toRadians(item.rotationDegrees.toDouble())
+                                val c = cos(r).toFloat()
+                                val s = sin(r).toFloat()
+                                val canvasDragX = dragAmount.x * c - dragAmount.y * s
+                                val canvasDragY = dragAmount.x * s + dragAmount.y * c
+                                
+                                currentAnglePointerCanvasX += canvasDragX
+                                currentAnglePointerCanvasY += canvasDragY
+                                
+                                val dx = currentAnglePointerCanvasX - screenX
+                                val dy = currentAnglePointerCanvasY - screenY
+                                
+                                val newAngleRad = kotlin.math.atan2(dy, dx)
+                                var newAngleDeg = Math.toDegrees(newAngleRad.toDouble()).toFloat() + 90f
+                                newAngleDeg = (newAngleDeg % 360f + 360f) % 360f
+                                
+                                // Snap to nearest 90 deg axes if close (threshold 5 degrees)
+                                val snapThreshold = 5f
+                                val nearest90 = kotlin.math.round(newAngleDeg / 90f) * 90f
+                                val finalAngle = if (abs(newAngleDeg - nearest90) < snapThreshold || abs(newAngleDeg - nearest90 - 360f) < snapThreshold) {
+                                    (nearest90 % 360f + 360f) % 360f
+                                } else {
+                                    newAngleDeg
+                                }
+                                
+                                val updatedList = placedItems.map {
+                                    if (it.name == item.name) {
+                                        it.copy(rotationDegrees = finalAngle)
+                                    } else it
+                                }
+                                onPlacedItemsChanged(updatedList)
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "↻",
+                        color = Color(0xFF3F51B5),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
